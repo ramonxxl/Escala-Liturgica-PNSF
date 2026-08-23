@@ -6,6 +6,8 @@ import {
   type RoleInput,
   type PersonInput,
   type CelebrationInput,
+  type AvailabilityInput,
+  type UnavailabilityInput,
   listCommunities,
   createCommunity,
   updateCommunity,
@@ -24,7 +26,13 @@ import {
   listCelebrations,
   createCelebration,
   updateCelebration,
-  removeCelebration
+  removeCelebration,
+  listAvailabilitiesByPerson,
+  createAvailability,
+  removeAvailability,
+  listUnavailabilitiesByPerson,
+  createUnavailability,
+  removeUnavailability
 } from "@escala/data";
 
 export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
@@ -63,4 +71,18 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
     updateCelebration(db, id, input)
   );
   ipcMain.handle("celebrations:remove", (_event, id: number) => removeCelebration(db, id));
+
+  ipcMain.handle("availabilities:listByPerson", (_event, personId: number) =>
+    listAvailabilitiesByPerson(db, personId)
+  );
+  ipcMain.handle("availabilities:create", (_event, input: AvailabilityInput) => createAvailability(db, input));
+  ipcMain.handle("availabilities:remove", (_event, id: number) => removeAvailability(db, id));
+
+  ipcMain.handle("unavailabilities:listByPerson", (_event, personId: number) =>
+    listUnavailabilitiesByPerson(db, personId)
+  );
+  ipcMain.handle("unavailabilities:create", (_event, input: UnavailabilityInput) =>
+    createUnavailability(db, input)
+  );
+  ipcMain.handle("unavailabilities:remove", (_event, id: number) => removeUnavailability(db, id));
 }

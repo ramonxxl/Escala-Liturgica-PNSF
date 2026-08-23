@@ -5,6 +5,7 @@ import ComunidadesPage from "./pages/ComunidadesPage";
 import FuncoesPage from "./pages/FuncoesPage";
 import IntegrantesPage from "./pages/IntegrantesPage";
 import MissasPage from "./pages/MissasPage";
+import DisponibilidadePage from "./pages/DisponibilidadePage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
 const NAV_ITEMS = [
@@ -51,7 +52,7 @@ export default function App(): JSX.Element {
           <Route path="/funcoes" element={<FuncoesPage />} />
           <Route path="/missas" element={<MissasPage />} />
           <Route path="/escalas" element={<PlaceholderPage title="Escalas" />} />
-          <Route path="/disponibilidade" element={<PlaceholderPage title="Disponibilidade" />} />
+          <Route path="/disponibilidade" element={<DisponibilidadePage />} />
           <Route path="/historico" element={<PlaceholderPage title="Histórico" />} />
           <Route path="/configuracoes" element={<PlaceholderPage title="Configurações" />} />
         </Routes>

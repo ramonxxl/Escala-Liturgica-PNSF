@@ -11,7 +11,8 @@
     "dev": "npm run build:libs && npm run dev --workspace=@escala/desktop",
     "build": "npm run build:libs && npm run build --workspace=@escala/desktop",
     "build:win": "npm run build:libs && npm run build:win --workspace=@escala/desktop",
-    "test": "npm run test --workspace=@escala/core"
+    "test": "npm run test --workspace=@escala/core",
+    "seed": "npm run build:libs && node scripts/seed-dev-data.js"
   },
   "engines": {
     "node": ">=18"

@@ -1,12 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { Community, Role } from "@escala/core";
+import type { Community, Role, Availability, Unavailability } from "@escala/core";
 import type {
   CommunityInput,
   RoleInput,
   PersonInput,
   PersonWithRoles,
   CelebrationInput,
-  CelebrationWithRequirements
+  CelebrationWithRequirements,
+  AvailabilityInput,
+  UnavailabilityInput
 } from "@escala/data";
 
 // Superficie minima exposta ao renderer. O renderer nunca acessa
@@ -52,6 +54,22 @@ const api = {
     update: (id: number, input: CelebrationInput): Promise<CelebrationWithRequirements> =>
       ipcRenderer.invoke("celebrations:update", id, input),
     remove: (id: number): Promise<void> => ipcRenderer.invoke("celebrations:remove", id)
+  },
+
+  availabilities: {
+    listByPerson: (personId: number): Promise<Availability[]> =>
+      ipcRenderer.invoke("availabilities:listByPerson", personId),
+    create: (input: AvailabilityInput): Promise<Availability> =>
+      ipcRenderer.invoke("availabilities:create", input),
+    remove: (id: number): Promise<void> => ipcRenderer.invoke("availabilities:remove", id)
+  },
+
+  unavailabilities: {
+    listByPerson: (personId: number): Promise<Unavailability[]> =>
+      ipcRenderer.invoke("unavailabilities:listByPerson", personId),
+    create: (input: UnavailabilityInput): Promise<Unavailability> =>
+      ipcRenderer.invoke("unavailabilities:create", input),
+    remove: (id: number): Promise<void> => ipcRenderer.invoke("unavailabilities:remove", id)
   }
 };
 

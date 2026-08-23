@@ -17,6 +17,7 @@ import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import type { Community, Role } from "@escala/core";
 import type { CelebrationWithRequirements } from "@escala/data";
+import { formatDate } from "../utils/format";
 
 interface FormValues {
   date: string;
@@ -29,11 +30,6 @@ interface FormValues {
 
 function emptyRequirements(roles: Role[]): Record<string, number> {
   return Object.fromEntries(roles.map((role) => [String(role.id), 0]));
-}
-
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split("-");
-  return year && month && day ? `${day}/${month}/${year}` : isoDate;
 }
 
 export default function MissasPage(): JSX.Element {
