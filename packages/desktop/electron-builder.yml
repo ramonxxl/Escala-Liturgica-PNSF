@@ -1,0 +1,16 @@
+appId: com.escalaliturgica.desktop
+productName: EscalaLiturgica
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+win:
+  target: nsis
+  artifactName: EscalaLiturgica_Setup.exe
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

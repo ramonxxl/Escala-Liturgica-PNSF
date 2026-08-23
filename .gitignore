@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-electron/
+out/
+release/
+*.log
+.DS_Store
+Thumbs.db
+
+# Bancos de dados locais e backups (dados reais de paroquia nao vao pro git)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backups/

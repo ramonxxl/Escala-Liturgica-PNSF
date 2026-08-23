@@ -1,0 +1,19 @@
+{
+  "name": "escala-liturgica",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Software desktop para geracao de escalas liturgicas de paroquias",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build:libs": "npm run build --workspace=@escala/core && npm run build --workspace=@escala/data",
+    "dev": "npm run build:libs && npm run dev --workspace=@escala/desktop",
+    "build": "npm run build:libs && npm run build --workspace=@escala/desktop",
+    "build:win": "npm run build:libs && npm run build:win --workspace=@escala/desktop",
+    "test": "npm run test --workspace=@escala/core"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
