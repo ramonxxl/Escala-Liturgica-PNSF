@@ -1,19 +1,43 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Group, Select, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Button, Group, Modal, Paper, Select, Stack, Table, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import type { CelebrationWithRequirements, PersistedAssignment, ScheduleWithAssignments } from "@escala/data";
-import type { UnfilledSlot } from "@escala/core";
+import type {
+  CelebrationWithRequirements,
+  PersistedAssignment,
+  PersonWithRoles,
+  ScheduleWithAssignments,
+  SubstituteCandidate
+} from "@escala/data";
 import { formatDate } from "../utils/format";
+
+function currentMonthRange(): { start: string; end: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const toIso = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { start: toIso(start), end: toIso(end) };
+}
 
 export default function EscalasPage(): JSX.Element {
   const [celebrations, setCelebrations] = useState<CelebrationWithRequirements[]>([]);
+  const [people, setPeople] = useState<PersonWithRoles[]>([]);
   const [celebrationId, setCelebrationId] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<ScheduleWithAssignments | undefined>(undefined);
-  const [unfilled, setUnfilled] = useState<UnfilledSlot[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [addPersonByRole, setAddPersonByRole] = useState<Record<number, string | null>>({});
+
+  const [substituteFor, setSubstituteFor] = useState<PersistedAssignment | null>(null);
+  const [candidates, setCandidates] = useState<SubstituteCandidate[]>([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
+  const [generatingRange, setGeneratingRange] = useState(false);
 
   useEffect(() => {
     window.api.celebrations.list().then(setCelebrations);
+    window.api.people.list().then(setPeople);
   }, []);
 
   const selectedCelebration = useMemo(
@@ -21,17 +45,15 @@ export default function EscalasPage(): JSX.Element {
     [celebrations, celebrationId]
   );
 
-  const loadSchedule = async (id: string): Promise<void> => {
+  const refreshSchedule = async (id: string): Promise<void> => {
     const existing = await window.api.schedules.getForCelebration(Number(id));
     setSchedule(existing);
-    setUnfilled([]);
   };
 
   const handleSelectCelebration = async (id: string | null): Promise<void> => {
     setCelebrationId(id);
     setSchedule(undefined);
-    setUnfilled([]);
-    if (id) await loadSchedule(id);
+    if (id) await refreshSchedule(id);
   };
 
   const handleGenerate = async (): Promise<void> => {
@@ -39,14 +61,71 @@ export default function EscalasPage(): JSX.Element {
     setGenerating(true);
     try {
       const result = await window.api.schedules.generate(Number(celebrationId));
-      setSchedule(result.schedule);
-      setUnfilled(result.unfilled);
+      setSchedule(result);
       notifications.show({ color: "green", title: "Escala gerada", message: "" });
     } catch (err) {
       notifications.show({ color: "red", title: "Erro ao gerar escala", message: (err as Error).message });
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleGenerateRange = async (): Promise<void> => {
+    if (!rangeStart || !rangeEnd) return;
+    setGeneratingRange(true);
+    try {
+      const result = await window.api.schedules.generateForRange(rangeStart, rangeEnd);
+      notifications.show({
+        color: "green",
+        title: "Escalas do período geradas",
+        message: `${result.schedules.length} missa(s) geradas${
+          result.skipped.length > 0 ? `, ${result.skipped.length} pulada(s) (escala já publicada)` : ""
+        }.`
+      });
+      const freshCelebrations = await window.api.celebrations.list();
+      setCelebrations(freshCelebrations);
+      if (celebrationId) await refreshSchedule(celebrationId);
+    } catch (err) {
+      notifications.show({ color: "red", title: "Erro ao gerar escalas do período", message: (err as Error).message });
+    } finally {
+      setGeneratingRange(false);
+    }
+  };
+
+  const handleRemove = async (assignment: PersistedAssignment): Promise<void> => {
+    if (!window.confirm(`Remover ${assignment.personName} de ${assignment.roleName}?`)) return;
+    await window.api.schedules.removeAssignment(assignment.id);
+    if (celebrationId) await refreshSchedule(celebrationId);
+  };
+
+  const handleAddPerson = async (roleId: number): Promise<void> => {
+    if (!schedule) return;
+    const personId = addPersonByRole[roleId];
+    if (!personId) return;
+    try {
+      await window.api.schedules.addAssignment(schedule.id, roleId, Number(personId));
+      setAddPersonByRole((prev) => ({ ...prev, [roleId]: null }));
+      if (celebrationId) await refreshSchedule(celebrationId);
+    } catch (err) {
+      notifications.show({ color: "red", title: "Erro ao adicionar", message: (err as Error).message });
+    }
+  };
+
+  const openSubstituteModal = async (assignment: PersistedAssignment): Promise<void> => {
+    setSubstituteFor(assignment);
+    setLoadingCandidates(true);
+    try {
+      setCandidates(await window.api.schedules.rankSubstitutes(assignment.id));
+    } finally {
+      setLoadingCandidates(false);
+    }
+  };
+
+  const handlePickSubstitute = async (personId: number): Promise<void> => {
+    if (!substituteFor) return;
+    await window.api.schedules.substitute(substituteFor.id, personId);
+    setSubstituteFor(null);
+    if (celebrationId) await refreshSchedule(celebrationId);
   };
 
   const assignmentsByRole = useMemo(() => {
@@ -68,9 +147,46 @@ export default function EscalasPage(): JSX.Element {
     return map;
   }, [selectedCelebration]);
 
+  const assignedPersonIds = useMemo(
+    () => new Set(schedule?.assignments.map((a) => a.personId) ?? []),
+    [schedule]
+  );
+
+  const peopleForRole = (roleId: number): { value: string; label: string }[] =>
+    people
+      .filter((p) => p.active && !assignedPersonIds.has(p.id) && p.roles.some((r) => r.id === roleId))
+      .map((p) => ({ value: String(p.id), label: p.fullName }));
+
   return (
     <Stack gap="md">
       <Title order={2}>Escalas</Title>
+
+      <Paper withBorder radius="md" p="md" maw={560}>
+        <Text fw={600} mb="xs">
+          Gerar escala de um período
+        </Text>
+        <Text size="sm" c="dimmed" mb="sm">
+          Gera todas as missas do período de uma vez, distribuindo os integrantes entre elas (evita repetir a
+          mesma pessoa demais vezes no mês). Missas com escala já publicada não são alteradas.
+        </Text>
+        <Group align="flex-end">
+          <TextInput label="De" type="date" value={rangeStart} onChange={(e) => setRangeStart(e.currentTarget.value)} />
+          <TextInput label="Até" type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.currentTarget.value)} />
+          <Button
+            variant="default"
+            onClick={() => {
+              const { start, end } = currentMonthRange();
+              setRangeStart(start);
+              setRangeEnd(end);
+            }}
+          >
+            Mês atual
+          </Button>
+          <Button onClick={handleGenerateRange} loading={generatingRange} disabled={!rangeStart || !rangeEnd}>
+            Gerar escala do período
+          </Button>
+        </Group>
+      </Paper>
 
       <Select
         label="Missa"
@@ -93,25 +209,38 @@ export default function EscalasPage(): JSX.Element {
             <Button onClick={handleGenerate} loading={generating}>
               {schedule ? "Regerar escala" : "Gerar escala"}
             </Button>
-            {schedule && unfilled.length === 0 && (
+            {schedule && schedule.unfilled.length === 0 && (
               <Badge color="green" variant="light">
                 ✅ Escala gerada
               </Badge>
             )}
-            {unfilled.length > 0 && (
+            {schedule && schedule.unfilled.length > 0 && (
               <Badge color="yellow" variant="light">
-                ⚠️ {unfilled.length} função(ões) pendente(s)
+                ⚠️ {schedule.unfilled.length} função(ões) pendente(s)
               </Badge>
             )}
           </Group>
 
-          {unfilled.length > 0 && (
+          {schedule && schedule.unfilled.length > 0 && (
             <Alert color="yellow" title="Necessidades não preenchidas">
-              <Stack gap={4}>
-                {unfilled.map((slot) => (
-                  <Text size="sm" key={`${slot.celebrationId}-${slot.roleId}`}>
-                    {roleNameById.get(slot.roleId) ?? `Função #${slot.roleId}`}: faltam {slot.missing}
-                  </Text>
+              <Stack gap="sm">
+                {schedule.unfilled.map((slot) => (
+                  <Group key={`${slot.celebrationId}-${slot.roleId}`} align="flex-end">
+                    <Text size="sm" w={220}>
+                      {roleNameById.get(slot.roleId) ?? `Função #${slot.roleId}`}: faltam {slot.missing}
+                    </Text>
+                    <Select
+                      placeholder="Adicionar integrante"
+                      data={peopleForRole(slot.roleId)}
+                      value={addPersonByRole[slot.roleId] ?? null}
+                      onChange={(value) => setAddPersonByRole((prev) => ({ ...prev, [slot.roleId]: value }))}
+                      w={220}
+                      searchable
+                    />
+                    <Button size="xs" onClick={() => handleAddPerson(slot.roleId)}>
+                      Adicionar
+                    </Button>
+                  </Group>
                 ))}
               </Stack>
             </Alert>
@@ -124,6 +253,7 @@ export default function EscalasPage(): JSX.Element {
                   <Table.Th>Função</Table.Th>
                   <Table.Th>Integrante</Table.Th>
                   <Table.Th>Pontuação</Table.Th>
+                  <Table.Th />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -131,8 +261,27 @@ export default function EscalasPage(): JSX.Element {
                   assignments.map((assignment, index) => (
                     <Table.Tr key={assignment.id}>
                       {index === 0 && <Table.Td rowSpan={assignments.length}>{roleName}</Table.Td>}
-                      <Table.Td>{assignment.personName}</Table.Td>
+                      <Table.Td>
+                        <Group gap={6}>
+                          {assignment.personName}
+                          {assignment.conflictFlag && (
+                            <Badge color="red" variant="light" size="sm">
+                              ⚠️ conflito
+                            </Badge>
+                          )}
+                        </Group>
+                      </Table.Td>
                       <Table.Td>{assignment.score}</Table.Td>
+                      <Table.Td>
+                        <Group gap="xs" justify="flex-end">
+                          <Button variant="subtle" size="xs" onClick={() => openSubstituteModal(assignment)}>
+                            Substituir
+                          </Button>
+                          <Button variant="subtle" color="red" size="xs" onClick={() => handleRemove(assignment)}>
+                            Remover
+                          </Button>
+                        </Group>
+                      </Table.Td>
                     </Table.Tr>
                   ))
                 )}
@@ -147,6 +296,40 @@ export default function EscalasPage(): JSX.Element {
           )}
         </>
       )}
+
+      <Modal
+        opened={substituteFor !== null}
+        onClose={() => setSubstituteFor(null)}
+        title={substituteFor ? `Substituir ${substituteFor.personName} (${substituteFor.roleName})` : ""}
+      >
+        {loadingCandidates && <Text size="sm">Buscando candidatos...</Text>}
+        {!loadingCandidates && candidates.length === 0 && (
+          <Text size="sm" c="dimmed">
+            Nenhum candidato disponível para essa função nesse horário.
+          </Text>
+        )}
+        <Stack gap="xs">
+          {candidates.map((candidate, index) => (
+            <Group key={candidate.personId} justify="space-between" wrap="nowrap">
+              <Text size="sm">
+                {index + 1}. {candidate.personName}
+                {candidate.sameCommunity && (
+                  <Text span c="dimmed" size="xs">
+                    {" "}
+                    (mesma comunidade)
+                  </Text>
+                )}
+              </Text>
+              <Group gap="xs">
+                <Badge variant="light">{candidate.score} pts</Badge>
+                <Button size="xs" onClick={() => handlePickSubstitute(candidate.personId)}>
+                  Escolher
+                </Button>
+              </Group>
+            </Group>
+          ))}
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

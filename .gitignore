@@ -13,3 +13,9 @@ Thumbs.db
 *.db-wal
 *.db-shm
 backups/
+
+# Imagens de referencia soltas na raiz (podem conter nomes reais de voluntarios,
+# nao sao codigo). Icones/assets reais do app devem ficar em packages/desktop/build/.
+/*.jpg
+/*.jpeg
+/*.png

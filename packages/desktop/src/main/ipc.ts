@@ -34,7 +34,12 @@ import {
   createUnavailability,
   removeUnavailability,
   generateAndSaveSchedule,
-  getScheduleForCelebration
+  generateAndSaveScheduleForRange,
+  getScheduleForCelebration,
+  addAssignment,
+  removeAssignment,
+  substituteAssignment,
+  rankSubstitutes
 } from "@escala/data";
 
 export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
@@ -93,5 +98,16 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
   );
   ipcMain.handle("schedules:getForCelebration", (_event, celebrationId: number) =>
     getScheduleForCelebration(db, celebrationId)
+  );
+  ipcMain.handle("schedules:addAssignment", (_event, scheduleId: number, roleId: number, personId: number) =>
+    addAssignment(db, scheduleId, roleId, personId)
+  );
+  ipcMain.handle("schedules:removeAssignment", (_event, assignmentId: number) => removeAssignment(db, assignmentId));
+  ipcMain.handle("schedules:substitute", (_event, assignmentId: number, newPersonId: number) =>
+    substituteAssignment(db, assignmentId, newPersonId)
+  );
+  ipcMain.handle("schedules:rankSubstitutes", (_event, assignmentId: number) => rankSubstitutes(db, assignmentId));
+  ipcMain.handle("schedules:generateForRange", (_event, startDate: string, endDate: string) =>
+    generateAndSaveScheduleForRange(db, startDate, endDate)
   );
 }

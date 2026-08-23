@@ -9,8 +9,10 @@ import type {
   CelebrationWithRequirements,
   AvailabilityInput,
   UnavailabilityInput,
-  GenerateScheduleResult,
-  ScheduleWithAssignments
+  ScheduleWithAssignments,
+  PersistedAssignment,
+  SubstituteCandidate,
+  BatchGenerationResult
 } from "@escala/data";
 
 // Superficie minima exposta ao renderer. O renderer nunca acessa
@@ -75,10 +77,20 @@ const api = {
   },
 
   schedules: {
-    generate: (celebrationId: number): Promise<GenerateScheduleResult> =>
+    generate: (celebrationId: number): Promise<ScheduleWithAssignments> =>
       ipcRenderer.invoke("schedules:generate", celebrationId),
     getForCelebration: (celebrationId: number): Promise<ScheduleWithAssignments | undefined> =>
-      ipcRenderer.invoke("schedules:getForCelebration", celebrationId)
+      ipcRenderer.invoke("schedules:getForCelebration", celebrationId),
+    addAssignment: (scheduleId: number, roleId: number, personId: number): Promise<PersistedAssignment> =>
+      ipcRenderer.invoke("schedules:addAssignment", scheduleId, roleId, personId),
+    removeAssignment: (assignmentId: number): Promise<void> =>
+      ipcRenderer.invoke("schedules:removeAssignment", assignmentId),
+    substitute: (assignmentId: number, newPersonId: number): Promise<PersistedAssignment> =>
+      ipcRenderer.invoke("schedules:substitute", assignmentId, newPersonId),
+    rankSubstitutes: (assignmentId: number): Promise<SubstituteCandidate[]> =>
+      ipcRenderer.invoke("schedules:rankSubstitutes", assignmentId),
+    generateForRange: (startDate: string, endDate: string): Promise<BatchGenerationResult> =>
+      ipcRenderer.invoke("schedules:generateForRange", startDate, endDate)
   }
 };
 

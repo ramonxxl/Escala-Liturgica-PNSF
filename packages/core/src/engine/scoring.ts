@@ -9,6 +9,18 @@ const RECENTLY_ASSIGNED_WINDOW_DAYS = 21;
 // Quantas escalas acima da media contam como sobrecarga.
 const OVERLOAD_THRESHOLD = 2;
 
+/** Media e maximo de escalas por pessoa no historico — usado para o criterio de equilibrio. */
+export function computeHistoryStats(assignmentCountByPerson: Record<number, number>): {
+  average: number;
+  max: number;
+} {
+  const counts = Object.values(assignmentCountByPerson);
+  return {
+    average: counts.length ? counts.reduce((a, b) => a + b, 0) / counts.length : 0,
+    max: counts.length ? Math.max(...counts) : 0
+  };
+}
+
 export interface ScoringContext {
   date: string;
   time: string;

@@ -1,5 +1,5 @@
 import { isEligible, slotKey } from "./eligibility";
-import { scoreCandidate } from "./scoring";
+import { computeHistoryStats, scoreCandidate } from "./scoring";
 import type { GenerationInput, GenerationResult, ProposedAssignment, UnfilledSlot } from "./types";
 
 /**
@@ -46,9 +46,8 @@ export function generateSchedule(input: GenerationInput): GenerationResult {
       let filled = 0;
 
       for (let i = 0; i < requirement.quantityNeeded; i++) {
-        const counts = Object.values(assignmentCountByPerson);
-        const averageAssignmentCount = counts.length ? counts.reduce((a, b) => a + b, 0) / counts.length : 0;
-        const maxAssignmentCount = counts.length ? Math.max(...counts) : 0;
+        const { average: averageAssignmentCount, max: maxAssignmentCount } =
+          computeHistoryStats(assignmentCountByPerson);
 
         const candidates = input.people.filter((person) =>
           isEligible(person, requirement.roleId, celebration.date, celebration.time, input, usedSlots)
