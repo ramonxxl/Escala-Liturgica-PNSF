@@ -4,6 +4,7 @@ import DashboardPage from "./pages/DashboardPage";
 import ComunidadesPage from "./pages/ComunidadesPage";
 import FuncoesPage from "./pages/FuncoesPage";
 import IntegrantesPage from "./pages/IntegrantesPage";
+import MissasPage from "./pages/MissasPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
 const NAV_ITEMS = [
@@ -48,7 +49,7 @@ export default function App(): JSX.Element {
           <Route path="/integrantes" element={<IntegrantesPage />} />
           <Route path="/comunidades" element={<ComunidadesPage />} />
           <Route path="/funcoes" element={<FuncoesPage />} />
-          <Route path="/missas" element={<PlaceholderPage title="Missas" />} />
+          <Route path="/missas" element={<MissasPage />} />
           <Route path="/escalas" element={<PlaceholderPage title="Escalas" />} />
           <Route path="/disponibilidade" element={<PlaceholderPage title="Disponibilidade" />} />
           <Route path="/historico" element={<PlaceholderPage title="Histórico" />} />

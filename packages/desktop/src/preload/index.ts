@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Community, Role } from "@escala/core";
-import type { CommunityInput, RoleInput, PersonInput, PersonWithRoles } from "@escala/data";
+import type {
+  CommunityInput,
+  RoleInput,
+  PersonInput,
+  PersonWithRoles,
+  CelebrationInput,
+  CelebrationWithRequirements
+} from "@escala/data";
 
 // Superficie minima exposta ao renderer. O renderer nunca acessa
 // Node/Electron/SQLite diretamente — apenas estes metodos via IPC.
@@ -36,6 +43,15 @@ const api = {
     setActive: (id: number, active: boolean): Promise<void> =>
       ipcRenderer.invoke("people:setActive", id, active),
     remove: (id: number): Promise<void> => ipcRenderer.invoke("people:remove", id)
+  },
+
+  celebrations: {
+    list: (): Promise<CelebrationWithRequirements[]> => ipcRenderer.invoke("celebrations:list"),
+    create: (input: CelebrationInput): Promise<CelebrationWithRequirements> =>
+      ipcRenderer.invoke("celebrations:create", input),
+    update: (id: number, input: CelebrationInput): Promise<CelebrationWithRequirements> =>
+      ipcRenderer.invoke("celebrations:update", id, input),
+    remove: (id: number): Promise<void> => ipcRenderer.invoke("celebrations:remove", id)
   }
 };
 

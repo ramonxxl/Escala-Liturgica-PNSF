@@ -5,6 +5,7 @@ import {
   type CommunityInput,
   type RoleInput,
   type PersonInput,
+  type CelebrationInput,
   listCommunities,
   createCommunity,
   updateCommunity,
@@ -19,7 +20,11 @@ import {
   createPerson,
   updatePerson,
   setPersonActive,
-  removePerson
+  removePerson,
+  listCelebrations,
+  createCelebration,
+  updateCelebration,
+  removeCelebration
 } from "@escala/data";
 
 export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
@@ -51,4 +56,11 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
   ipcMain.handle("people:update", (_event, id: number, input: PersonInput) => updatePerson(db, id, input));
   ipcMain.handle("people:setActive", (_event, id: number, active: boolean) => setPersonActive(db, id, active));
   ipcMain.handle("people:remove", (_event, id: number) => removePerson(db, id));
+
+  ipcMain.handle("celebrations:list", () => listCelebrations(db));
+  ipcMain.handle("celebrations:create", (_event, input: CelebrationInput) => createCelebration(db, input));
+  ipcMain.handle("celebrations:update", (_event, id: number, input: CelebrationInput) =>
+    updateCelebration(db, id, input)
+  );
+  ipcMain.handle("celebrations:remove", (_event, id: number) => removeCelebration(db, id));
 }
