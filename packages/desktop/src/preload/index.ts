@@ -8,7 +8,9 @@ import type {
   CelebrationInput,
   CelebrationWithRequirements,
   AvailabilityInput,
-  UnavailabilityInput
+  UnavailabilityInput,
+  GenerateScheduleResult,
+  ScheduleWithAssignments
 } from "@escala/data";
 
 // Superficie minima exposta ao renderer. O renderer nunca acessa
@@ -70,6 +72,13 @@ const api = {
     create: (input: UnavailabilityInput): Promise<Unavailability> =>
       ipcRenderer.invoke("unavailabilities:create", input),
     remove: (id: number): Promise<void> => ipcRenderer.invoke("unavailabilities:remove", id)
+  },
+
+  schedules: {
+    generate: (celebrationId: number): Promise<GenerateScheduleResult> =>
+      ipcRenderer.invoke("schedules:generate", celebrationId),
+    getForCelebration: (celebrationId: number): Promise<ScheduleWithAssignments | undefined> =>
+      ipcRenderer.invoke("schedules:getForCelebration", celebrationId)
   }
 };
 

@@ -32,7 +32,9 @@ import {
   removeAvailability,
   listUnavailabilitiesByPerson,
   createUnavailability,
-  removeUnavailability
+  removeUnavailability,
+  generateAndSaveSchedule,
+  getScheduleForCelebration
 } from "@escala/data";
 
 export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
@@ -85,4 +87,11 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
     createUnavailability(db, input)
   );
   ipcMain.handle("unavailabilities:remove", (_event, id: number) => removeUnavailability(db, id));
+
+  ipcMain.handle("schedules:generate", (_event, celebrationId: number) =>
+    generateAndSaveSchedule(db, celebrationId)
+  );
+  ipcMain.handle("schedules:getForCelebration", (_event, celebrationId: number) =>
+    getScheduleForCelebration(db, celebrationId)
+  );
 }
