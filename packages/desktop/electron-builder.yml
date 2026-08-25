@@ -1,6 +1,11 @@
 appId: com.escalaliturgica.desktop
 productName: EscalaLiturgica
 electronVersion: 33.4.11
+# Sem modulos nativos (sql.js e WASM), entao nao ha nada pra recompilar pro
+# Electron — desativar evita que o electron-builder tente reinstalar
+# dependencias de producao dentro de packages/desktop (o node_modules e
+# hoisted pra raiz do monorepo, e essa reinstalacao falha em CI).
+npmRebuild: false
 directories:
   output: release
   buildResources: build
