@@ -1,6 +1,7 @@
 export * from "./domain/types";
 export * from "./domain/dateUtils";
 export * from "./engine/scoringWeights";
+export * from "./engine/schedulingRules";
 export * from "./engine/types";
 export * from "./engine/eligibility";
 export * from "./engine/scoring";

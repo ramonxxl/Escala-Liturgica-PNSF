@@ -14,9 +14,12 @@ import {
   buildGenerationInput,
   generateAndSaveSchedule,
   generateAndSaveScheduleForRange,
+  getScheduleForCelebration,
   rankSubstitutes,
   removeAssignment,
-  substituteAssignment
+  setAssignmentStatus,
+  substituteAssignment,
+  verifySchedule
 } from "../src/repositories/generation";
 
 let dir: string;
@@ -53,7 +56,8 @@ describe("buildGenerationInput", () => {
     expect(input.people).toHaveLength(1);
     expect(input.people[0].roles).toEqual([{ roleId: leitorId, preferenceWeight: 0 }]);
     expect(input.availabilityRules).toHaveLength(1);
-    expect(input.weights.unavailablePenalty).toBe(-1000);
+    expect(input.weights.available).toBe(10);
+    expect(input.rules).toEqual({ spouseRule: "priorizar", maxPerMonth: null, minIntervalDays: null });
   });
 });
 
@@ -80,6 +84,43 @@ describe("generateAndSaveSchedule", () => {
       status: string;
     };
     expect(updated.status).toBe("generated");
+  });
+
+  it("persiste os motivos da pontuacao (explicabilidade)", () => {
+    createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+
+    const schedule = generateAndSaveSchedule(db, celebration.id);
+
+    expect(schedule.assignments[0].reasons.length).toBeGreaterThan(0);
+    expect(schedule.assignments[0].reasons[0]).toHaveProperty("label");
+    expect(schedule.assignments[0].reasons[0]).toHaveProperty("delta");
+
+    // sobrevive a um reload direto do banco (json ida e volta)
+    const reloaded = getScheduleForCelebration(db, celebration.id)!;
+    expect(reloaded.assignments[0].reasons).toEqual(schedule.assignments[0].reasons);
+  });
+
+  it("atribuicao manual fica com reasons vazio (nao ha pontuacao a explicar)", () => {
+    createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    const other = createPerson(db, { fullName: "Ana", communityId, roleIds: [leitorId] });
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 2 }]
+    });
+    const schedule = generateAndSaveSchedule(db, celebration.id);
+
+    const added = addAssignment(db, schedule.id, leitorId, other.id);
+    expect(added.reasons).toEqual([]);
   });
 
   it("reporta necessidades nao preenchidas quando faltam candidatos", () => {
@@ -448,5 +489,73 @@ describe("conjuge junto na geracao", () => {
 
     const ministro = schedule.assignments.find((a) => a.roleName === "Ministro");
     expect(ministro?.personName).toBe("João");
+  });
+});
+
+describe("verifySchedule", () => {
+  it("escala completa e sem conflitos -> nenhum problema", () => {
+    createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+    generateAndSaveSchedule(db, celebration.id);
+
+    expect(verifySchedule(db, celebration.id)).toEqual([]);
+  });
+
+  it("reporta vaga faltando como aviso", () => {
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+    // ninguem cadastrado com a funcao -> nenhuma escala gerada, sem sequer criar o registro de schedule
+    generateAndSaveSchedule(db, celebration.id);
+
+    const problems = verifySchedule(db, celebration.id);
+    expect(problems).toEqual([{ severity: "warning", message: "Falta 1 Leitor." }]);
+  });
+
+  it("reporta atribuicao recusada como aviso", () => {
+    createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+    const schedule = generateAndSaveSchedule(db, celebration.id);
+    setAssignmentStatus(db, schedule.assignments[0].id, "declined");
+
+    const problems = verifySchedule(db, celebration.id);
+    expect(problems).toEqual([{ severity: "warning", message: "Maria recusou a função Leitor." }]);
+  });
+
+  it("reporta como erro uma atribuicao manual que ficou indisponivel depois", () => {
+    const maria = createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    const celebration = createCelebration(db, {
+      date: "2026-08-30", // domingo
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+    const schedule = generateAndSaveSchedule(db, celebration.id);
+    expect(schedule.assignments[0].personId).toBe(maria.id);
+
+    // disponibilidade mudou depois que a escala foi gerada
+    createAvailability(db, { personId: maria.id, weekday: 0, time: "19:30", status: "unavailable" });
+
+    const problems = verifySchedule(db, celebration.id);
+    expect(problems).toEqual([
+      { severity: "error", message: "Maria não está disponível nesse dia e horário (função Leitor)." }
+    ]);
   });
 });

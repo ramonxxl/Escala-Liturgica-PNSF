@@ -17,7 +17,10 @@ import type { GenerationInput, GenerationResult, ProposedAssignment, UnfilledSlo
  * funcao, inativo ou ja escalado nesse mesmo dia (em qualquer outra missa
  * ou funcao, incluindo escalas ja publicadas fora deste lote). Quando nao
  * ha candidatos suficientes, a vaga fica em aberto e e reportada em
- * `unfilled`.
+ * `unfilled`. Regras configuraveis (limite mensal, intervalo minimo, regra
+ * de conjuge — ver schedulingRules.ts) nunca bloqueiam uma vaga, apenas
+ * ajustam a pontuacao: o motor prefere preencher "fora da regra" a deixar
+ * a vaga vazia.
  */
 export function generateSchedule(input: GenerationInput): GenerationResult {
   const assignments: ProposedAssignment[] = [];
@@ -30,6 +33,12 @@ export function generateSchedule(input: GenerationInput): GenerationResult {
 
   const assignmentCountByPerson: Record<number, number> = { ...input.history.assignmentCountByPerson };
   const lastAssignmentDateByPerson: Record<number, string> = { ...input.history.lastAssignmentDateByPerson };
+  const lastAssignmentDateByPersonAndCommunity: Record<string, string> = {
+    ...input.history.lastAssignmentDateByPersonAndCommunity
+  };
+  const monthlyAssignmentCountByPerson: Record<string, Record<number, number>> = Object.fromEntries(
+    Object.entries(input.history.monthlyAssignmentCountByPerson).map(([month, byPerson]) => [month, { ...byPerson }])
+  );
 
   const sortedCelebrations = [...input.celebrations].sort((a, b) =>
     a.date === b.date ? a.time.localeCompare(b.time) : a.date.localeCompare(b.date)
@@ -64,17 +73,25 @@ export function generateSchedule(input: GenerationInput): GenerationResult {
         const scored = candidates
           .map((person) => ({
             person,
-            score: scoreCandidate(
+            ...scoreCandidate(
               person,
               requirement.roleId,
               {
                 date: celebration.date,
                 time: celebration.time,
+                communityId: celebration.communityId,
                 availabilityRules: input.availabilityRules,
-                history: { assignmentCountByPerson, lastAssignmentDateByPerson, busyDatesByPerson: input.history.busyDatesByPerson },
+                history: {
+                  assignmentCountByPerson,
+                  lastAssignmentDateByPerson,
+                  lastAssignmentDateByPersonAndCommunity,
+                  monthlyAssignmentCountByPerson,
+                  busyDatesByPerson: input.history.busyDatesByPerson
+                },
                 averageAssignmentCount,
                 maxAssignmentCount,
-                usedSlots
+                usedSlots,
+                rules: input.rules
               },
               input.weights
             )
@@ -87,13 +104,18 @@ export function generateSchedule(input: GenerationInput): GenerationResult {
           celebrationId: celebration.id,
           roleId: requirement.roleId,
           personId: chosen.person.id,
-          score: chosen.score
+          score: chosen.score,
+          reasons: chosen.reasons
         });
 
         usedSlots.add(slotKey(chosen.person.id, celebration.date, celebration.time));
         usedDates.add(dayKey(chosen.person.id, celebration.date));
         assignmentCountByPerson[chosen.person.id] = (assignmentCountByPerson[chosen.person.id] ?? 0) + 1;
         lastAssignmentDateByPerson[chosen.person.id] = celebration.date;
+        lastAssignmentDateByPersonAndCommunity[`${chosen.person.id}|${celebration.communityId}`] = celebration.date;
+        const monthKey = celebration.date.slice(0, 7);
+        const monthMap = (monthlyAssignmentCountByPerson[monthKey] ??= {});
+        monthMap[chosen.person.id] = (monthMap[chosen.person.id] ?? 0) + 1;
 
         filled++;
       }

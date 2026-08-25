@@ -1,4 +1,4 @@
-import type { Celebration } from "@escala/core";
+import { getWeekday, type Celebration } from "@escala/core";
 import type { AppDatabase } from "../sqlAdapter";
 
 export interface RequirementWithRole {
@@ -174,4 +174,25 @@ export function updateCelebration(
 /** Remove a missa. Se ja existir uma escala gerada para ela, a escala e suas atribuicoes sao removidas em cascata. */
 export function removeCelebration(db: AppDatabase, id: number): void {
   db.prepare("DELETE FROM celebrations WHERE id = ?").run(id);
+}
+
+export interface MassSlots {
+  /** Dias da semana (0=domingo..6=sabado) com pelo menos uma missa cadastrada, ordenados. */
+  weekdays: number[];
+  /** Horarios distintos usados nas missas cadastradas, ordenados. */
+  times: string[];
+}
+
+/** Usado para montar a grade de disponibilidade — so mostra dias/horarios que realmente tem missa. */
+export function listDistinctMassSlots(db: AppDatabase): MassSlots {
+  const dateRows = db.prepare("SELECT DISTINCT date FROM celebrations").all() as { date: string }[];
+  const weekdaySet = new Set<number>();
+  for (const row of dateRows) weekdaySet.add(getWeekday(row.date));
+
+  const timeRows = db.prepare("SELECT DISTINCT time FROM celebrations ORDER BY time").all() as { time: string }[];
+
+  return {
+    weekdays: [...weekdaySet].sort((a, b) => a - b),
+    times: timeRows.map((row) => row.time)
+  };
 }

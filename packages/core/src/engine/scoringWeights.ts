@@ -8,10 +8,12 @@ export interface ScoringWeights {
   fewRecentAssignments: number;
   timeSlotPreference: number;
   spouseTogetherBonus: number;
+  notInLastCelebrationBonus: number;
+  notInLastCommunityCelebrationBonus: number;
   recentlyAssignedPenalty: number;
   overloadPenalty: number;
-  conflictPenalty: number;
-  unavailablePenalty: number;
+  nearMonthlyLimitPenalty: number;
+  minIntervalPenalty: number;
 }
 
 export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
@@ -19,8 +21,10 @@ export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
   fewRecentAssignments: 8,
   timeSlotPreference: 5,
   spouseTogetherBonus: 6,
+  notInLastCelebrationBonus: 4,
+  notInLastCommunityCelebrationBonus: 4,
   recentlyAssignedPenalty: -10,
   overloadPenalty: -20,
-  conflictPenalty: -100,
-  unavailablePenalty: -1000
+  nearMonthlyLimitPenalty: -60,
+  minIntervalPenalty: -60
 };

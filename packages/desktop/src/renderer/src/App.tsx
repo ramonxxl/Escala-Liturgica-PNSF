@@ -10,7 +10,7 @@ import DisponibilidadePage from "./pages/DisponibilidadePage";
 import EscalasPage from "./pages/EscalasPage";
 import RelatorioPage from "./pages/RelatorioPage";
 import HistoricoPage from "./pages/HistoricoPage";
-import PlaceholderPage from "./pages/PlaceholderPage";
+import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: "🏠" },
@@ -69,7 +69,7 @@ export default function App(): JSX.Element {
           <Route path="/relatorio" element={<RelatorioPage />} />
           <Route path="/disponibilidade" element={<DisponibilidadePage />} />
           <Route path="/historico" element={<HistoricoPage />} />
-          <Route path="/configuracoes" element={<PlaceholderPage title="Configurações" />} />
+          <Route path="/configuracoes" element={<ConfiguracoesPage />} />
         </Routes>
       </AppShell.Main>
     </AppShell>

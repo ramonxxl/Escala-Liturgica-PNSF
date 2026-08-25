@@ -6,9 +6,8 @@ describe("core package wiring", () => {
     expect(corePing()).toBe("pong-from-core");
   });
 
-  it("tem pesos de pontuacao default coerentes com as regras obrigatorias", () => {
-    expect(DEFAULT_SCORING_WEIGHTS.unavailablePenalty).toBeLessThan(
-      DEFAULT_SCORING_WEIGHTS.conflictPenalty
-    );
+  it("penalidades de limite configurado sao mais fortes que as penalidades padrao (reforco forte, nao regra dura)", () => {
+    expect(DEFAULT_SCORING_WEIGHTS.nearMonthlyLimitPenalty).toBeLessThan(DEFAULT_SCORING_WEIGHTS.recentlyAssignedPenalty);
+    expect(DEFAULT_SCORING_WEIGHTS.minIntervalPenalty).toBeLessThan(DEFAULT_SCORING_WEIGHTS.overloadPenalty);
   });
 });

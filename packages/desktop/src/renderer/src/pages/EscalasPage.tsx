@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -8,6 +9,7 @@ import {
   Modal,
   MultiSelect,
   Paper,
+  Popover,
   Select,
   Stack,
   Table,
@@ -21,6 +23,7 @@ import type {
   CelebrationWithRequirements,
   PersistedAssignment,
   PersonWithRoles,
+  ScheduleProblem,
   ScheduleWithAssignments,
   SubstituteCandidate
 } from "@escala/data";
@@ -53,6 +56,9 @@ export default function EscalasPage(): JSX.Element {
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
   const [generatingRange, setGeneratingRange] = useState(false);
+
+  const [verifying, setVerifying] = useState(false);
+  const [problems, setProblems] = useState<ScheduleProblem[] | null>(null);
 
   useEffect(() => {
     window.api.celebrations.list().then(setCelebrations);
@@ -138,6 +144,16 @@ export default function EscalasPage(): JSX.Element {
       if (celebrationId) await refreshSchedule(celebrationId);
     } catch (err) {
       notifications.show({ color: "red", title: "Erro ao adicionar", message: (err as Error).message });
+    }
+  };
+
+  const handleVerify = async (): Promise<void> => {
+    if (!celebrationId) return;
+    setVerifying(true);
+    try {
+      setProblems(await window.api.schedules.verify(Number(celebrationId)));
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -269,6 +285,11 @@ export default function EscalasPage(): JSX.Element {
             <Button onClick={handleGenerate} loading={generating}>
               {schedule ? "Regerar escala" : "Gerar escala"}
             </Button>
+            {schedule && (
+              <Button variant="light" onClick={handleVerify} loading={verifying}>
+                🔍 Verificar escala
+              </Button>
+            )}
             {schedule && schedule.unfilled.length === 0 && (
               <Badge color="green" variant="light">
                 ✅ Escala gerada
@@ -334,6 +355,31 @@ export default function EscalasPage(): JSX.Element {
                             <Badge color="red" variant="light" size="sm">
                               ⚠️ conflito
                             </Badge>
+                          )}
+                          {assignment.reasons.length > 0 && (
+                            <Popover width={280} position="right" withArrow shadow="md">
+                              <Popover.Target>
+                                <ActionIcon variant="subtle" size="sm" radius="xl" title="Por que essa pessoa foi escolhida?">
+                                  ❓
+                                </ActionIcon>
+                              </Popover.Target>
+                              <Popover.Dropdown>
+                                <Text size="sm" fw={600} mb={4}>
+                                  Por que {assignment.personName} foi escolhido(a)?
+                                </Text>
+                                <Stack gap={2}>
+                                  {assignment.reasons.map((reason, i) => (
+                                    <Group key={i} justify="space-between" gap="xs" wrap="nowrap">
+                                      <Text size="xs">{reason.label}</Text>
+                                      <Text size="xs" c={reason.delta >= 0 ? "green" : "red"} fw={600}>
+                                        {reason.delta >= 0 ? "+" : ""}
+                                        {reason.delta}
+                                      </Text>
+                                    </Group>
+                                  ))}
+                                </Stack>
+                              </Popover.Dropdown>
+                            </Popover>
                           )}
                         </Group>
                       </Table.Td>
@@ -432,6 +478,23 @@ export default function EscalasPage(): JSX.Element {
             </Group>
           ))}
         </Stack>
+      </Modal>
+
+      <Modal opened={problems !== null} onClose={() => setProblems(null)} title="Verificação da escala">
+        {problems && problems.length === 0 && (
+          <Text c="green" fw={600}>
+            ✅ Escala válida — nenhum problema encontrado.
+          </Text>
+        )}
+        {problems && problems.length > 0 && (
+          <Stack gap="xs">
+            {problems.map((problem, i) => (
+              <Alert key={i} color={problem.severity === "error" ? "red" : "yellow"} py="xs">
+                {problem.message}
+              </Alert>
+            ))}
+          </Stack>
+        )}
       </Modal>
     </Stack>
   );

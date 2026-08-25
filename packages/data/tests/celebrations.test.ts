@@ -9,6 +9,7 @@ import {
   createCelebration,
   getCelebration,
   listCelebrations,
+  listDistinctMassSlots,
   removeCelebration,
   updateCelebration
 } from "../src/repositories/celebrations";
@@ -105,5 +106,33 @@ describe("celebrationsRepository", () => {
 
     expect(getCelebration(db, celebration.id)).toBeUndefined();
     expect(listCelebrations(db)).toHaveLength(0);
+  });
+
+  it("lista dias da semana e horarios distintos usados nas missas cadastradas", () => {
+    createCelebration(db, {
+      date: "2026-08-30", // domingo
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: []
+    });
+    createCelebration(db, {
+      date: "2026-09-06", // domingo tambem -> nao duplica no weekday
+      time: "07:00",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: []
+    });
+    createCelebration(db, {
+      date: "2026-09-02", // quarta-feira
+      time: "19:30", // mesmo horario de outra missa -> nao duplica no time
+      communityId,
+      celebrationType: "Missa Semanal",
+      requirements: []
+    });
+
+    const slots = listDistinctMassSlots(db);
+    expect(slots.weekdays).toEqual([0, 3]); // domingo e quarta, ordenados
+    expect(slots.times).toEqual(["07:00", "19:30"]);
   });
 });

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { ActionIcon, Badge, Button, Group, Select, Stack, Table, Text, TextInput, Title } from "@mantine/core";
+import { useEffect, useMemo, useState } from "react";
+import { ActionIcon, Badge, Button, Group, Select, Stack, Table, Text, TextInput, Title, UnstyledButton } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import type { Availability, Person, Unavailability } from "@escala/core";
+import type { MassSlots } from "@escala/data";
 import { formatDate } from "../utils/format";
 
 const WEEKDAYS = [
@@ -14,15 +15,18 @@ const WEEKDAYS = [
   "Sábado"
 ];
 
+const WEEKDAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function cellKey(weekday: number, time: string): string {
+  return `${weekday}|${time}`;
+}
+
 export default function DisponibilidadePage(): JSX.Element {
   const [people, setPeople] = useState<Person[]>([]);
   const [personId, setPersonId] = useState<string | null>(null);
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [unavailabilities, setUnavailabilities] = useState<Unavailability[]>([]);
-
-  const [newWeekday, setNewWeekday] = useState<string | null>("0");
-  const [newTime, setNewTime] = useState("");
-  const [newStatus, setNewStatus] = useState<string | null>("unavailable");
+  const [massSlots, setMassSlots] = useState<MassSlots>({ weekdays: [], times: [] });
 
   const [newStart, setNewStart] = useState("");
   const [newEnd, setNewEnd] = useState("");
@@ -30,6 +34,7 @@ export default function DisponibilidadePage(): JSX.Element {
 
   useEffect(() => {
     window.api.people.list().then((list) => setPeople(list.filter((p) => p.active)));
+    window.api.celebrations.distinctMassSlots().then(setMassSlots);
   }, []);
 
   const loadPersonData = async (id: string): Promise<void> => {
@@ -46,18 +51,40 @@ export default function DisponibilidadePage(): JSX.Element {
     if (id) await loadPersonData(id);
   };
 
-  const handleAddAvailability = async (): Promise<void> => {
-    if (!personId || !newTime || newWeekday === null || !newStatus) {
-      notifications.show({ color: "red", title: "Preencha dia, horário e status", message: "" });
-      return;
+  const availabilityByCell = useMemo(() => {
+    const map = new Map<string, Availability>();
+    for (const rule of availabilities) {
+      if (rule.weekday !== null && rule.time) map.set(cellKey(rule.weekday, rule.time), rule);
     }
-    await window.api.availabilities.create({
-      personId: Number(personId),
-      weekday: Number(newWeekday),
-      time: newTime,
-      status: newStatus as Availability["status"]
-    });
-    setNewTime("");
+    return map;
+  }, [availabilities]);
+
+  const gridKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const weekday of massSlots.weekdays) {
+      for (const time of massSlots.times) keys.add(cellKey(weekday, time));
+    }
+    return keys;
+  }, [massSlots]);
+
+  // regras cadastradas pra um dia/horario que nao corresponde a nenhuma missa cadastrada
+  // (ex: missa removida depois, ou horario digitado antes de existir a grade) — mantidas visiveis pra nao sumir com dado do usuario
+  const orphanRules = useMemo(
+    () => availabilities.filter((rule) => rule.weekday === null || !gridKeys.has(cellKey(rule.weekday, rule.time ?? ""))),
+    [availabilities, gridKeys]
+  );
+
+  const handleCycleCell = async (weekday: number, time: string): Promise<void> => {
+    if (!personId) return;
+    const existing = availabilityByCell.get(cellKey(weekday, time));
+    if (!existing) {
+      await window.api.availabilities.create({ personId: Number(personId), weekday, time, status: "unavailable" });
+    } else if (existing.status === "unavailable") {
+      await window.api.availabilities.remove(existing.id);
+      await window.api.availabilities.create({ personId: Number(personId), weekday, time, status: "available" });
+    } else {
+      await window.api.availabilities.remove(existing.id);
+    }
     await loadPersonData(personId);
   };
 
@@ -113,74 +140,75 @@ export default function DisponibilidadePage(): JSX.Element {
           <Stack gap="xs">
             <Text fw={600}>Disponibilidade semanal recorrente</Text>
             <Text size="sm" c="dimmed">
-              Ex: toda quinta-feira às 19h30 o integrante está indisponível.
+              Clique numa célula pra alternar: sem marcação → 🔴 indisponível → 🟢 disponível → sem marcação. As
+              linhas e colunas vêm dos dias/horários que já têm missa cadastrada.
             </Text>
 
-            <Table striped verticalSpacing="xs" w="fit-content">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Dia</Table.Th>
-                  <Table.Th>Horário</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                  <Table.Th />
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {availabilities.map((rule) => (
-                  <Table.Tr key={rule.id}>
-                    <Table.Td>{WEEKDAYS[rule.weekday ?? 0]}</Table.Td>
-                    <Table.Td>{rule.time}</Table.Td>
-                    <Table.Td>
-                      <Badge color={rule.status === "available" ? "green" : "red"} variant="light">
-                        {rule.status === "available" ? "Disponível" : "Indisponível"}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <ActionIcon variant="subtle" color="red" onClick={() => handleRemoveAvailability(rule.id)}>
-                        ✕
-                      </ActionIcon>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-                {availabilities.length === 0 && (
-                  <Table.Tr>
-                    <Table.Td colSpan={4}>
-                      <Text c="dimmed" size="sm">
-                        Nenhuma regra cadastrada.
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                )}
-              </Table.Tbody>
-            </Table>
+            {massSlots.weekdays.length === 0 || massSlots.times.length === 0 ? (
+              <Text c="dimmed" size="sm">
+                Cadastre pelo menos uma missa primeiro — a grade é montada a partir dos dias e horários das missas.
+              </Text>
+            ) : (
+              <Table.ScrollContainer minWidth={200 + massSlots.weekdays.length * 90}>
+                <Table striped withTableBorder verticalSpacing="xs" w="fit-content">
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Horário</Table.Th>
+                      {massSlots.weekdays.map((weekday) => (
+                        <Table.Th key={weekday} ta="center">
+                          {WEEKDAYS_SHORT[weekday]}
+                        </Table.Th>
+                      ))}
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {massSlots.times.map((time) => (
+                      <Table.Tr key={time}>
+                        <Table.Td>{time}</Table.Td>
+                        {massSlots.weekdays.map((weekday) => {
+                          const rule = availabilityByCell.get(cellKey(weekday, time));
+                          return (
+                            <Table.Td key={weekday} ta="center">
+                              <UnstyledButton
+                                onClick={() => handleCycleCell(weekday, time)}
+                                title={
+                                  rule
+                                    ? rule.status === "available"
+                                      ? "Disponível — clique para remover a marcação"
+                                      : "Indisponível — clique para marcar como disponível"
+                                    : "Sem marcação — clique para marcar como indisponível"
+                                }
+                              >
+                                {rule ? (rule.status === "available" ? "🟢" : "🔴") : "—"}
+                              </UnstyledButton>
+                            </Table.Td>
+                          );
+                        })}
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            )}
 
-            <Group align="flex-end">
-              <Select
-                label="Dia da semana"
-                data={WEEKDAYS.map((label, index) => ({ value: String(index), label }))}
-                value={newWeekday}
-                onChange={setNewWeekday}
-                w={180}
-              />
-              <TextInput
-                label="Horário"
-                type="time"
-                value={newTime}
-                onChange={(e) => setNewTime(e.currentTarget.value)}
-                w={120}
-              />
-              <Select
-                label="Status"
-                data={[
-                  { value: "available", label: "Disponível" },
-                  { value: "unavailable", label: "Indisponível" }
-                ]}
-                value={newStatus}
-                onChange={setNewStatus}
-                w={160}
-              />
-              <Button onClick={handleAddAvailability}>Adicionar</Button>
-            </Group>
+            {orphanRules.length > 0 && (
+              <Stack gap={4} mt="xs">
+                <Text size="sm" c="dimmed">
+                  Outras regras cadastradas (fora da grade acima):
+                </Text>
+                {orphanRules.map((rule) => (
+                  <Group key={rule.id} gap="xs">
+                    <Badge color={rule.status === "available" ? "green" : "red"} variant="light">
+                      {WEEKDAYS[rule.weekday ?? 0]} {rule.time} —{" "}
+                      {rule.status === "available" ? "Disponível" : "Indisponível"}
+                    </Badge>
+                    <ActionIcon variant="subtle" color="red" size="sm" onClick={() => handleRemoveAvailability(rule.id)}>
+                      ✕
+                    </ActionIcon>
+                  </Group>
+                ))}
+              </Stack>
+            )}
           </Stack>
 
           <Stack gap="xs" mt="md">

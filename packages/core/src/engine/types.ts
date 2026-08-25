@@ -1,3 +1,4 @@
+import type { SchedulingRules } from "./schedulingRules";
 import type { ScoringWeights } from "./scoringWeights";
 
 export interface GenerationPersonRole {
@@ -36,6 +37,7 @@ export interface GenerationCelebration {
   id: number;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
+  communityId: number;
   requirements: GenerationRequirement[];
 }
 
@@ -44,6 +46,10 @@ export interface GenerationHistory {
   assignmentCountByPerson: Record<number, number>;
   /** Data da ultima escala da pessoa (usado para evitar escalar em sequencia). */
   lastAssignmentDateByPerson: Record<number, string>;
+  /** Data da ultima escala da pessoa NESSA comunidade (chave `${personId}|${communityId}`). */
+  lastAssignmentDateByPersonAndCommunity: Record<string, string>;
+  /** Quantas vezes a pessoa ja foi escalada em cada mes (chave "YYYY-MM" -> personId -> total). */
+  monthlyAssignmentCountByPerson: Record<string, Record<number, number>>;
   /** Datas em que a pessoa ja tem alguma escala (qualquer missa/funcao) — nunca escalar de novo nessas datas. */
   busyDatesByPerson: Record<number, string[]>;
 }
@@ -55,6 +61,13 @@ export interface GenerationInput {
   unavailabilityPeriods: GenerationUnavailabilityPeriod[];
   history: GenerationHistory;
   weights: ScoringWeights;
+  rules: SchedulingRules;
+}
+
+/** Um dos motivos que compuseram a pontuacao de um candidato — usado para explicar "por que essa pessoa foi escolhida". */
+export interface ScoreReason {
+  label: string;
+  delta: number;
 }
 
 export interface ProposedAssignment {
@@ -62,6 +75,7 @@ export interface ProposedAssignment {
   roleId: number;
   personId: number;
   score: number;
+  reasons: ScoreReason[];
 }
 
 export interface UnfilledSlot {

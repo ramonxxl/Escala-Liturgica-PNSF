@@ -48,7 +48,7 @@ describe("openDatabase", () => {
     const weights = db
       .prepare("SELECT value FROM settings WHERE key = 'scoring_weights'")
       .get() as { value: string };
-    expect(JSON.parse(weights.value).unavailablePenalty).toBe(-1000);
+    expect(JSON.parse(weights.value).available).toBe(10);
   });
 
   it("e idempotente ao reabrir o mesmo banco (nao duplica migrations nem settings)", async () => {

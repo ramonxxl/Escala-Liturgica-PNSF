@@ -14,10 +14,12 @@ import {
   type GenerationPerson,
   type GenerationUnavailabilityPeriod,
   type ProposedAssignment,
+  type ScoreReason,
   type ScoringWeights,
   type UnfilledSlot
 } from "@escala/core";
 import type { AppDatabase } from "../sqlAdapter";
+import { getSchedulingRules } from "./schedulingRules";
 
 interface PersonRow {
   id: number;
@@ -36,6 +38,7 @@ interface CelebrationRow {
   id: number;
   date: string;
   time: string;
+  community_id: number;
 }
 
 interface RequirementRow {
@@ -60,6 +63,7 @@ interface UnavailabilityRow {
 interface HistoryRow {
   person_id: number;
   celebration_date: string;
+  community_id: number;
 }
 
 function getScoringWeights(db: AppDatabase): ScoringWeights {
@@ -80,7 +84,7 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], 
   const placeholders = celebrationIds.map(() => "?").join(",");
 
   const celebrationRows = db
-    .prepare(`SELECT id, date, time FROM celebrations WHERE id IN (${placeholders})`)
+    .prepare(`SELECT id, date, time, community_id FROM celebrations WHERE id IN (${placeholders})`)
     .all(...celebrationIds) as CelebrationRow[];
 
   const requirementRows = db
@@ -101,6 +105,7 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], 
     id: row.id,
     date: row.date,
     time: row.time,
+    communityId: row.community_id,
     requirements: requirementsByCelebration.get(row.id) ?? []
   }));
 
@@ -141,7 +146,7 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], 
   // pesar no equilibrio/penalidade de quem esta prestes a ser reescalado nelas.
   const historyRows = db
     .prepare(
-      `SELECT sa.person_id as person_id, c.date as celebration_date
+      `SELECT sa.person_id as person_id, c.date as celebration_date, c.community_id as community_id
        FROM schedule_assignments sa
        JOIN schedules s ON s.id = sa.schedule_id
        JOIN celebrations c ON c.id = s.celebration_id
@@ -151,13 +156,27 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], 
 
   const assignmentCountByPerson: Record<number, number> = {};
   const lastAssignmentDateByPerson: Record<number, string> = {};
+  const lastAssignmentDateByPersonAndCommunity: Record<string, string> = {};
+  const monthlyAssignmentCountByPerson: Record<string, Record<number, number>> = {};
   const busyDatesByPerson: Record<number, string[]> = {};
   for (const row of historyRows) {
     assignmentCountByPerson[row.person_id] = (assignmentCountByPerson[row.person_id] ?? 0) + 1;
+
     const current = lastAssignmentDateByPerson[row.person_id];
     if (!current || row.celebration_date > current) {
       lastAssignmentDateByPerson[row.person_id] = row.celebration_date;
     }
+
+    const communityKey = `${row.person_id}|${row.community_id}`;
+    const currentCommunity = lastAssignmentDateByPersonAndCommunity[communityKey];
+    if (!currentCommunity || row.celebration_date > currentCommunity) {
+      lastAssignmentDateByPersonAndCommunity[communityKey] = row.celebration_date;
+    }
+
+    const monthKey = row.celebration_date.slice(0, 7);
+    const monthMap = (monthlyAssignmentCountByPerson[monthKey] ??= {});
+    monthMap[row.person_id] = (monthMap[row.person_id] ?? 0) + 1;
+
     const dates = busyDatesByPerson[row.person_id] ?? (busyDatesByPerson[row.person_id] = []);
     if (!dates.includes(row.celebration_date)) dates.push(row.celebration_date);
   }
@@ -167,8 +186,15 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], 
     people,
     availabilityRules,
     unavailabilityPeriods,
-    history: { assignmentCountByPerson, lastAssignmentDateByPerson, busyDatesByPerson },
-    weights: getScoringWeights(db)
+    history: {
+      assignmentCountByPerson,
+      lastAssignmentDateByPerson,
+      lastAssignmentDateByPersonAndCommunity,
+      monthlyAssignmentCountByPerson,
+      busyDatesByPerson
+    },
+    weights: getScoringWeights(db),
+    rules: getSchedulingRules(db)
   };
 }
 
@@ -182,6 +208,8 @@ export interface PersistedAssignment {
   source: "auto" | "manual";
   status: "proposed" | "confirmed" | "declined";
   conflictFlag: boolean;
+  /** Motivos que compuseram a pontuacao (so para atribuicoes automaticas — manuais ficam com []). */
+  reasons: ScoreReason[];
 }
 
 export interface ScheduleWithAssignments {
@@ -202,6 +230,7 @@ interface AssignmentRow {
   source: "auto" | "manual";
   status: "proposed" | "confirmed" | "declined";
   conflict_flag: number;
+  reasons: string | null;
 }
 
 function mapAssignmentRow(row: AssignmentRow): PersistedAssignment {
@@ -214,14 +243,15 @@ function mapAssignmentRow(row: AssignmentRow): PersistedAssignment {
     score: row.score,
     source: row.source,
     status: row.status,
-    conflictFlag: row.conflict_flag === 1
+    conflictFlag: row.conflict_flag === 1,
+    reasons: row.reasons ? JSON.parse(row.reasons) : []
   };
 }
 
 const ASSIGNMENT_SELECT = `
   SELECT sa.id as id, sa.role_id as role_id, r.name as role_name, sa.person_id as person_id,
          p.full_name as person_name, sa.score as score, sa.source as source, sa.status as status,
-         sa.conflict_flag as conflict_flag
+         sa.conflict_flag as conflict_flag, sa.reasons as reasons
   FROM schedule_assignments sa
   JOIN roles r ON r.id = sa.role_id
   JOIN people p ON p.id = sa.person_id
@@ -315,15 +345,16 @@ function persistGeneratedSchedule(
   }
 
   const insertAssignment = db.prepare(
-    `INSERT INTO schedule_assignments (schedule_id, role_id, person_id, score, source, status)
-     VALUES (@scheduleId, @roleId, @personId, @score, 'auto', 'proposed')`
+    `INSERT INTO schedule_assignments (schedule_id, role_id, person_id, score, source, status, reasons)
+     VALUES (@scheduleId, @roleId, @personId, @score, 'auto', 'proposed', @reasons)`
   );
   for (const assignment of assignments) {
     insertAssignment.run({
       scheduleId,
       roleId: assignment.roleId,
       personId: assignment.personId,
-      score: assignment.score
+      score: assignment.score,
+      reasons: JSON.stringify(assignment.reasons)
     });
   }
 
@@ -417,13 +448,13 @@ export function generateAndSaveScheduleForRange(
   return { schedules, skipped };
 }
 
-/** Verdadeiro se colocar `personId` nessa missa geraria um conflito (dupla escala no mesmo horario, indisponibilidade ou ferias). */
-function computeConflictFlag(
+/** Motivo do conflito de colocar `personId` nessa missa (dupla escala no mesmo dia, indisponibilidade ou ferias), ou null se nao ha conflito. */
+function explainConflict(
   db: AppDatabase,
   personId: number,
   celebrationId: number,
   excludeAssignmentId?: number
-): boolean {
+): string | null {
   const celebration = db.prepare("SELECT date, time FROM celebrations WHERE id = ?").get(celebrationId) as {
     date: string;
     time: string;
@@ -438,7 +469,7 @@ function computeConflictFlag(
        WHERE sa.person_id = ? AND c.date = ? AND sa.id != ?`
     )
     .get(personId, celebration.date, excludeAssignmentId ?? -1) as { c: number };
-  if (doubleBooked.c > 0) return true;
+  if (doubleBooked.c > 0) return "já tem outra escala nesse dia";
 
   const weekday = getWeekday(celebration.date);
   const unavailable = db
@@ -447,14 +478,24 @@ function computeConflictFlag(
        WHERE person_id = ? AND recurring = 1 AND weekday = ? AND time = ? AND status = 'unavailable'`
     )
     .get(personId, weekday, celebration.time) as { c: number };
-  if (unavailable.c > 0) return true;
+  if (unavailable.c > 0) return "não está disponível nesse dia e horário";
 
   const onVacation = db
     .prepare(`SELECT COUNT(*) as c FROM unavailabilities WHERE person_id = ? AND ? BETWEEN start_date AND end_date`)
     .get(personId, celebration.date) as { c: number };
-  if (onVacation.c > 0) return true;
+  if (onVacation.c > 0) return "está de férias/viagem nessa data";
 
-  return false;
+  return null;
+}
+
+/** Verdadeiro se colocar `personId` nessa missa geraria um conflito (dupla escala no mesmo dia, indisponibilidade ou ferias). */
+function computeConflictFlag(
+  db: AppDatabase,
+  personId: number,
+  celebrationId: number,
+  excludeAssignmentId?: number
+): boolean {
+  return explainConflict(db, personId, celebrationId, excludeAssignmentId) !== null;
 }
 
 /** Adiciona manualmente uma pessoa a uma funcao da escala (ex: preencher uma vaga que ficou pendente). */
@@ -604,17 +645,19 @@ export function rankSubstitutes(db: AppDatabase, assignmentId: number): Substitu
     .map((person) => {
       const sameCommunity = communityByPerson.get(person.id) === celebration.community_id;
       const spouseTogether = person.spousePersonId != null && busyAtSameTimeIds.has(person.spousePersonId);
-      let score = scoreCandidate(
+      let { score } = scoreCandidate(
         person,
         assignment.role_id,
         {
           date: celebration.date,
           time: celebration.time,
+          communityId: celebration.community_id,
           availabilityRules: input.availabilityRules,
           history: input.history,
           averageAssignmentCount: average,
           maxAssignmentCount: max,
-          usedSlots
+          usedSlots,
+          rules: input.rules
         },
         input.weights
       );
@@ -622,4 +665,54 @@ export function rankSubstitutes(db: AppDatabase, assignmentId: number): Substitu
       return { personId: person.id, personName: person.fullName, score, sameCommunity, spouseTogether };
     })
     .sort((a, b) => b.score - a.score);
+}
+
+export interface ScheduleProblem {
+  severity: "error" | "warning";
+  message: string;
+}
+
+/**
+ * Revisao completa da escala de uma missa antes de publicar: vagas nao
+ * preenchidas, atribuicoes recusadas e conflitos (dupla escala no dia,
+ * indisponibilidade, ferias) — reavaliados na hora, entao pegam mudancas na
+ * disponibilidade feitas depois que a atribuicao foi gerada/adicionada.
+ */
+export function verifySchedule(db: AppDatabase, celebrationId: number): ScheduleProblem[] {
+  const problems: ScheduleProblem[] = [];
+
+  const schedule = db.prepare("SELECT id FROM schedules WHERE celebration_id = ?").get(celebrationId) as
+    | { id: number }
+    | undefined;
+
+  const filledByRole = new Map<number, number>();
+  if (schedule) {
+    const rows = db.prepare(`${ASSIGNMENT_SELECT} WHERE sa.schedule_id = ?`).all(schedule.id) as AssignmentRow[];
+    for (const row of rows) {
+      filledByRole.set(row.role_id, (filledByRole.get(row.role_id) ?? 0) + 1);
+    }
+    for (const row of rows) {
+      if (row.status === "declined") {
+        problems.push({ severity: "warning", message: `${row.person_name} recusou a função ${row.role_name}.` });
+        continue;
+      }
+      const reason = explainConflict(db, row.person_id, celebrationId, row.id);
+      if (reason) {
+        problems.push({ severity: "error", message: `${row.person_name} ${reason} (função ${row.role_name}).` });
+      }
+    }
+  }
+
+  for (const unfilled of computeUnfilled(db, celebrationId, filledByRole)) {
+    const role = db.prepare("SELECT name FROM roles WHERE id = ?").get(unfilled.roleId) as
+      | { name: string }
+      | undefined;
+    const roleName = role?.name ?? "função";
+    problems.push({
+      severity: "warning",
+      message: unfilled.missing === 1 ? `Falta 1 ${roleName}.` : `Faltam ${unfilled.missing} ${roleName}s.`
+    });
+  }
+
+  return problems;
 }

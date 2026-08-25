@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { corePing } from "@escala/core";
+import { corePing, type SchedulingRules } from "@escala/core";
 import {
   type AppDatabase,
   type CommunityInput,
@@ -27,6 +27,7 @@ import {
   createCelebration,
   updateCelebration,
   removeCelebration,
+  listDistinctMassSlots,
   listAvailabilitiesByPerson,
   createAvailability,
   removeAvailability,
@@ -40,12 +41,15 @@ import {
   removeAssignment,
   substituteAssignment,
   rankSubstitutes,
+  verifySchedule,
   setAssignmentStatus,
   getDashboardSummary,
   getAssignmentHistory,
   getParishBranding,
   setParishName,
-  setParishLogo
+  setParishLogo,
+  getSchedulingRules,
+  setSchedulingRules
 } from "@escala/data";
 
 export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
@@ -84,6 +88,7 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
     updateCelebration(db, id, input)
   );
   ipcMain.handle("celebrations:remove", (_event, id: number) => removeCelebration(db, id));
+  ipcMain.handle("celebrations:distinctMassSlots", () => listDistinctMassSlots(db));
 
   ipcMain.handle("availabilities:listByPerson", (_event, personId: number) =>
     listAvailabilitiesByPerson(db, personId)
@@ -113,6 +118,7 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
     substituteAssignment(db, assignmentId, newPersonId)
   );
   ipcMain.handle("schedules:rankSubstitutes", (_event, assignmentId: number) => rankSubstitutes(db, assignmentId));
+  ipcMain.handle("schedules:verify", (_event, celebrationId: number) => verifySchedule(db, celebrationId));
   ipcMain.handle("schedules:generateForRange", (_event, startDate: string, endDate: string, roleIds?: number[]) =>
     generateAndSaveScheduleForRange(db, startDate, endDate, roleIds)
   );
@@ -128,4 +134,9 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
   ipcMain.handle("branding:get", () => getParishBranding(db));
   ipcMain.handle("branding:setName", (_event, name: string) => setParishName(db, name));
   ipcMain.handle("branding:setLogo", (_event, dataUrl: string) => setParishLogo(db, dataUrl));
+
+  ipcMain.handle("settings:getSchedulingRules", () => getSchedulingRules(db));
+  ipcMain.handle("settings:setSchedulingRules", (_event, rules: Partial<SchedulingRules>) =>
+    setSchedulingRules(db, rules)
+  );
 }

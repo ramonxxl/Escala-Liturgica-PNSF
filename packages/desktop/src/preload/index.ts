@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { Community, Role, Availability, Unavailability } from "@escala/core";
+import type { Community, Role, Availability, Unavailability, SchedulingRules } from "@escala/core";
 import type {
   CommunityInput,
   RoleInput,
@@ -7,11 +7,13 @@ import type {
   PersonWithRoles,
   CelebrationInput,
   CelebrationWithRequirements,
+  MassSlots,
   AvailabilityInput,
   UnavailabilityInput,
   ScheduleWithAssignments,
   PersistedAssignment,
   SubstituteCandidate,
+  ScheduleProblem,
   BatchGenerationResult,
   DashboardSummary,
   HistorySummary,
@@ -61,7 +63,8 @@ const api = {
       ipcRenderer.invoke("celebrations:create", input),
     update: (id: number, input: CelebrationInput): Promise<CelebrationWithRequirements> =>
       ipcRenderer.invoke("celebrations:update", id, input),
-    remove: (id: number): Promise<void> => ipcRenderer.invoke("celebrations:remove", id)
+    remove: (id: number): Promise<void> => ipcRenderer.invoke("celebrations:remove", id),
+    distinctMassSlots: (): Promise<MassSlots> => ipcRenderer.invoke("celebrations:distinctMassSlots")
   },
 
   availabilities: {
@@ -93,6 +96,8 @@ const api = {
       ipcRenderer.invoke("schedules:substitute", assignmentId, newPersonId),
     rankSubstitutes: (assignmentId: number): Promise<SubstituteCandidate[]> =>
       ipcRenderer.invoke("schedules:rankSubstitutes", assignmentId),
+    verify: (celebrationId: number): Promise<ScheduleProblem[]> =>
+      ipcRenderer.invoke("schedules:verify", celebrationId),
     generateForRange: (startDate: string, endDate: string, roleIds?: number[]): Promise<BatchGenerationResult> =>
       ipcRenderer.invoke("schedules:generateForRange", startDate, endDate, roleIds),
     setAssignmentStatus: (
@@ -113,6 +118,12 @@ const api = {
     get: (): Promise<ParishBranding> => ipcRenderer.invoke("branding:get"),
     setName: (name: string): Promise<void> => ipcRenderer.invoke("branding:setName", name),
     setLogo: (dataUrl: string): Promise<void> => ipcRenderer.invoke("branding:setLogo", dataUrl)
+  },
+
+  settings: {
+    getSchedulingRules: (): Promise<SchedulingRules> => ipcRenderer.invoke("settings:getSchedulingRules"),
+    setSchedulingRules: (rules: Partial<SchedulingRules>): Promise<SchedulingRules> =>
+      ipcRenderer.invoke("settings:setSchedulingRules", rules)
   }
 };
 
