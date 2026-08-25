@@ -42,7 +42,10 @@ import {
   rankSubstitutes,
   setAssignmentStatus,
   getDashboardSummary,
-  getAssignmentHistory
+  getAssignmentHistory,
+  getParishBranding,
+  setParishName,
+  setParishLogo
 } from "@escala/data";
 
 export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
@@ -121,4 +124,8 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
 
   ipcMain.handle("dashboard:summary", () => getDashboardSummary(db));
   ipcMain.handle("history:summary", () => getAssignmentHistory(db));
+
+  ipcMain.handle("branding:get", () => getParishBranding(db));
+  ipcMain.handle("branding:setName", (_event, name: string) => setParishName(db, name));
+  ipcMain.handle("branding:setLogo", (_event, dataUrl: string) => setParishLogo(db, dataUrl));
 }

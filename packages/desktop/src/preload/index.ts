@@ -14,7 +14,8 @@ import type {
   SubstituteCandidate,
   BatchGenerationResult,
   DashboardSummary,
-  HistorySummary
+  HistorySummary,
+  ParishBranding
 } from "@escala/data";
 
 // Superficie minima exposta ao renderer. O renderer nunca acessa
@@ -105,6 +106,12 @@ const api = {
 
   history: {
     summary: (): Promise<HistorySummary> => ipcRenderer.invoke("history:summary")
+  },
+
+  branding: {
+    get: (): Promise<ParishBranding> => ipcRenderer.invoke("branding:get"),
+    setName: (name: string): Promise<void> => ipcRenderer.invoke("branding:setName", name),
+    setLogo: (dataUrl: string): Promise<void> => ipcRenderer.invoke("branding:setLogo", dataUrl)
   }
 };
 

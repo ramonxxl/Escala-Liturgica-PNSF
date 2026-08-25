@@ -8,3 +8,4 @@ export * from "./repositories/unavailabilities";
 export * from "./repositories/generation";
 export * from "./repositories/dashboard";
 export * from "./repositories/history";
+export * from "./repositories/branding";

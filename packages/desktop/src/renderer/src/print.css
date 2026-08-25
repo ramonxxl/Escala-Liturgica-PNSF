@@ -1,5 +1,25 @@
+/* Tamanho da logo — vale tanto na tela quanto na impressao (sem isso,
+   uma imagem grande aparece em tamanho natural, potencialmente enorme). */
+.parish-logo-dashboard {
+  max-width: 56px;
+  max-height: 56px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.report-logo {
+  max-width: 48px;
+  max-height: 48px;
+  object-fit: contain;
+}
+
 /* Ao imprimir, mostra so o conteudo dentro de #print-report — esconde o
    menu lateral, cabecalho e qualquer controle da tela (botoes, campos). */
+@page {
+  size: A4 portrait;
+  margin: 8mm;
+}
+
 @media print {
   body * {
     visibility: hidden;
@@ -14,7 +34,23 @@
     top: 0;
     width: 100%;
   }
-  .report-entry {
+
+  /* Tabela compacta — tenta caber o maximo de missas numa unica folha. */
+  .report-table {
+    font-size: 9px;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .report-table th,
+  .report-table td {
+    padding: 2px 5px !important;
+    line-height: 1.2;
+  }
+  .report-logo {
+    max-height: 36px;
+    max-width: 36px;
+  }
+  tr {
     break-inside: avoid;
   }
 }
