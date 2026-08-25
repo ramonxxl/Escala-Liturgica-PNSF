@@ -1,6 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Group, Modal, Paper, Select, Stack, Table, Text, TextInput, Title } from "@mantine/core";
+import {
+  Alert,
+  Badge,
+  Button,
+  Group,
+  Modal,
+  MultiSelect,
+  Paper,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title
+} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import type { Role } from "@escala/core";
 import type {
   CelebrationWithRequirements,
   PersistedAssignment,
@@ -22,6 +37,8 @@ function currentMonthRange(): { start: string; end: string } {
 export default function EscalasPage(): JSX.Element {
   const [celebrations, setCelebrations] = useState<CelebrationWithRequirements[]>([]);
   const [people, setPeople] = useState<PersonWithRoles[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [roleFilter, setRoleFilter] = useState<string[]>([]);
   const [celebrationId, setCelebrationId] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<ScheduleWithAssignments | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
@@ -38,7 +55,10 @@ export default function EscalasPage(): JSX.Element {
   useEffect(() => {
     window.api.celebrations.list().then(setCelebrations);
     window.api.people.list().then(setPeople);
+    window.api.roles.list().then(setRoles);
   }, []);
+
+  const roleIdsFilter = roleFilter.length > 0 ? roleFilter.map(Number) : undefined;
 
   const selectedCelebration = useMemo(
     () => celebrations.find((c) => String(c.id) === celebrationId),
@@ -60,7 +80,7 @@ export default function EscalasPage(): JSX.Element {
     if (!celebrationId) return;
     setGenerating(true);
     try {
-      const result = await window.api.schedules.generate(Number(celebrationId));
+      const result = await window.api.schedules.generate(Number(celebrationId), roleIdsFilter);
       setSchedule(result);
       notifications.show({ color: "green", title: "Escala gerada", message: "" });
     } catch (err) {
@@ -74,7 +94,7 @@ export default function EscalasPage(): JSX.Element {
     if (!rangeStart || !rangeEnd) return;
     setGeneratingRange(true);
     try {
-      const result = await window.api.schedules.generateForRange(rangeStart, rangeEnd);
+      const result = await window.api.schedules.generateForRange(rangeStart, rangeEnd, roleIdsFilter);
       notifications.show({
         color: "green",
         title: "Escalas do período geradas",
@@ -160,6 +180,18 @@ export default function EscalasPage(): JSX.Element {
   return (
     <Stack gap="md">
       <Title order={2}>Escalas</Title>
+
+      <MultiSelect
+        label="Gerar somente para estas funções"
+        description="Deixe vazio para gerar todas as funções. As funções não selecionadas ficam intocadas."
+        placeholder="Todas as funções"
+        maw={420}
+        data={roles.map((r) => ({ value: String(r.id), label: r.name }))}
+        value={roleFilter}
+        onChange={setRoleFilter}
+        searchable
+        clearable
+      />
 
       <Paper withBorder radius="md" p="md" maw={560}>
         <Text fw={600} mb="xs">

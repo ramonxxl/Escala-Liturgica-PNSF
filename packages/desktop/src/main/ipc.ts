@@ -93,8 +93,8 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
   );
   ipcMain.handle("unavailabilities:remove", (_event, id: number) => removeUnavailability(db, id));
 
-  ipcMain.handle("schedules:generate", (_event, celebrationId: number) =>
-    generateAndSaveSchedule(db, celebrationId)
+  ipcMain.handle("schedules:generate", (_event, celebrationId: number, roleIds?: number[]) =>
+    generateAndSaveSchedule(db, celebrationId, roleIds)
   );
   ipcMain.handle("schedules:getForCelebration", (_event, celebrationId: number) =>
     getScheduleForCelebration(db, celebrationId)
@@ -107,7 +107,7 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
     substituteAssignment(db, assignmentId, newPersonId)
   );
   ipcMain.handle("schedules:rankSubstitutes", (_event, assignmentId: number) => rankSubstitutes(db, assignmentId));
-  ipcMain.handle("schedules:generateForRange", (_event, startDate: string, endDate: string) =>
-    generateAndSaveScheduleForRange(db, startDate, endDate)
+  ipcMain.handle("schedules:generateForRange", (_event, startDate: string, endDate: string, roleIds?: number[]) =>
+    generateAndSaveScheduleForRange(db, startDate, endDate, roleIds)
   );
 }

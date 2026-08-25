@@ -68,8 +68,13 @@ function getScoringWeights(db: AppDatabase): ScoringWeights {
   return { ...DEFAULT_SCORING_WEIGHTS, ...JSON.parse(row.value) };
 }
 
-/** Monta o input do motor de geracao (packages/core) a partir do estado atual do banco. */
-export function buildGenerationInput(db: AppDatabase, celebrationIds: number[]): GenerationInput {
+/**
+ * Monta o input do motor de geracao (packages/core) a partir do estado atual
+ * do banco. Quando `roleIds` e informado, so as necessidades dessas funcoes
+ * entram nas missas (permite gerar "so os Ministros", por exemplo, deixando
+ * as outras funcoes intocadas).
+ */
+export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], roleIds?: number[]): GenerationInput {
   const placeholders = celebrationIds.map(() => "?").join(",");
 
   const celebrationRows = db
@@ -84,6 +89,7 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[]):
 
   const requirementsByCelebration = new Map<number, { roleId: number; quantityNeeded: number }[]>();
   for (const row of requirementRows) {
+    if (roleIds && !roleIds.includes(row.role_id)) continue;
     const list = requirementsByCelebration.get(row.celebration_id) ?? [];
     list.push({ roleId: row.role_id, quantityNeeded: row.quantity_needed });
     requirementsByCelebration.set(row.celebration_id, list);
@@ -256,27 +262,46 @@ export function getScheduleForCelebration(db: AppDatabase, celebrationId: number
 
 /**
  * Persiste as atribuicoes geradas para UMA missa como escala rascunho
- * (draft), substituindo uma escala rascunho anterior se existir. Lanca erro
- * se a missa ja tiver uma escala publicada (nao sobrescreve automaticamente).
- * Deve ser chamada dentro de uma transacao pelo chamador.
+ * (draft). Se `roleIds` for informado, so as atribuicoes anteriores dessas
+ * funcoes sao substituidas (as demais funcoes ficam intocadas) — permite
+ * regenerar "so os Ministros" sem mexer nos Leitores ja escalados, por
+ * exemplo. Sem `roleIds`, a escala inteira e substituida. Lanca erro se a
+ * missa ja tiver uma escala publicada. Deve ser chamada dentro de uma
+ * transacao pelo chamador.
  */
-function persistGeneratedSchedule(db: AppDatabase, celebrationId: number, assignments: ProposedAssignment[]): void {
+function persistGeneratedSchedule(
+  db: AppDatabase,
+  celebrationId: number,
+  roleIds: number[] | undefined,
+  assignments: ProposedAssignment[]
+): void {
   const existing = db.prepare("SELECT id, status FROM schedules WHERE celebration_id = ?").get(celebrationId) as
     | { id: number; status: string }
     | undefined;
 
-  if (existing) {
-    if (existing.status !== "draft") {
-      throw new Error(
-        "Essa missa já tem uma escala publicada. A regeração automática não está disponível para escalas já publicadas."
-      );
-    }
-    db.prepare("DELETE FROM schedules WHERE id = ?").run(existing.id);
+  if (existing && existing.status !== "draft") {
+    throw new Error(
+      "Essa missa já tem uma escala publicada. A regeração automática não está disponível para escalas já publicadas."
+    );
   }
 
-  const scheduleResult = db
-    .prepare("INSERT INTO schedules (celebration_id, status, algorithm_version) VALUES (?, 'draft', 'v1')")
-    .run(celebrationId);
+  let scheduleId: number;
+  if (existing) {
+    scheduleId = existing.id;
+    if (roleIds && roleIds.length > 0) {
+      const placeholders = roleIds.map(() => "?").join(",");
+      db.prepare(`DELETE FROM schedule_assignments WHERE schedule_id = ? AND role_id IN (${placeholders})`).run(
+        scheduleId,
+        ...roleIds
+      );
+    } else {
+      db.prepare("DELETE FROM schedule_assignments WHERE schedule_id = ?").run(scheduleId);
+    }
+  } else {
+    scheduleId = db
+      .prepare("INSERT INTO schedules (celebration_id, status, algorithm_version) VALUES (?, 'draft', 'v1')")
+      .run(celebrationId).lastInsertRowid;
+  }
 
   const insertAssignment = db.prepare(
     `INSERT INTO schedule_assignments (schedule_id, role_id, person_id, score, source, status)
@@ -284,7 +309,7 @@ function persistGeneratedSchedule(db: AppDatabase, celebrationId: number, assign
   );
   for (const assignment of assignments) {
     insertAssignment.run({
-      scheduleId: scheduleResult.lastInsertRowid,
+      scheduleId,
       roleId: assignment.roleId,
       personId: assignment.personId,
       score: assignment.score
@@ -298,13 +323,18 @@ function persistGeneratedSchedule(db: AppDatabase, celebrationId: number, assign
  * Roda o motor de geracao para uma unica missa e persiste o resultado como
  * escala rascunho (draft). Se ja existir uma escala rascunho para a missa,
  * ela e substituida (permite regenerar enquanto ainda nao foi publicada).
- * Escalas ja publicadas nao sao sobrescritas automaticamente.
+ * Escalas ja publicadas nao sao sobrescritas automaticamente. Se `roleIds`
+ * for informado, gera so essas funcoes, preservando as demais ja escaladas.
  */
-export function generateAndSaveSchedule(db: AppDatabase, celebrationId: number): ScheduleWithAssignments {
-  const input = buildGenerationInput(db, [celebrationId]);
+export function generateAndSaveSchedule(
+  db: AppDatabase,
+  celebrationId: number,
+  roleIds?: number[]
+): ScheduleWithAssignments {
+  const input = buildGenerationInput(db, [celebrationId], roleIds);
   const result = generateSchedule(input);
 
-  db.transaction(() => persistGeneratedSchedule(db, celebrationId, result.assignments))();
+  db.transaction(() => persistGeneratedSchedule(db, celebrationId, roleIds, result.assignments))();
 
   return getScheduleForCelebration(db, celebrationId) as ScheduleWithAssignments;
 }
@@ -324,12 +354,16 @@ export interface BatchGenerationResult {
  * o que permite o autoequilibrio real entre elas (quem foi escalado numa
  * missa do inicio do mes perde prioridade nas seguintes) — diferente de
  * gerar missa por missa, onde o equilibrio so enxerga o historico ja salvo.
- * Missas com escala ja publicada sao puladas (ver `skipped`).
+ * Missas com escala ja publicada sao puladas (ver `skipped`). Se `roleIds`
+ * for informado, gera so essas funcoes em todas as missas do periodo,
+ * preservando as demais funcoes ja escaladas (ex: gerar so os Coroinhas do
+ * mes, sem mexer nos Ministros que ja foram definidos).
  */
 export function generateAndSaveScheduleForRange(
   db: AppDatabase,
   startDate: string,
-  endDate: string
+  endDate: string,
+  roleIds?: number[]
 ): BatchGenerationResult {
   const celebrationRows = db
     .prepare("SELECT id FROM celebrations WHERE date >= ? AND date <= ? ORDER BY date, time")
@@ -352,7 +386,7 @@ export function generateAndSaveScheduleForRange(
     return { schedules: [], skipped };
   }
 
-  const input = buildGenerationInput(db, eligibleIds);
+  const input = buildGenerationInput(db, eligibleIds, roleIds);
   const result = generateSchedule(input);
 
   const assignmentsByCelebration = new Map<number, ProposedAssignment[]>();
@@ -364,7 +398,7 @@ export function generateAndSaveScheduleForRange(
 
   db.transaction(() => {
     for (const celebrationId of eligibleIds) {
-      persistGeneratedSchedule(db, celebrationId, assignmentsByCelebration.get(celebrationId) ?? []);
+      persistGeneratedSchedule(db, celebrationId, roleIds, assignmentsByCelebration.get(celebrationId) ?? []);
     }
   })();
 

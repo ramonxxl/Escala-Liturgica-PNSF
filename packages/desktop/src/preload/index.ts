@@ -77,8 +77,8 @@ const api = {
   },
 
   schedules: {
-    generate: (celebrationId: number): Promise<ScheduleWithAssignments> =>
-      ipcRenderer.invoke("schedules:generate", celebrationId),
+    generate: (celebrationId: number, roleIds?: number[]): Promise<ScheduleWithAssignments> =>
+      ipcRenderer.invoke("schedules:generate", celebrationId, roleIds),
     getForCelebration: (celebrationId: number): Promise<ScheduleWithAssignments | undefined> =>
       ipcRenderer.invoke("schedules:getForCelebration", celebrationId),
     addAssignment: (scheduleId: number, roleId: number, personId: number): Promise<PersistedAssignment> =>
@@ -89,8 +89,8 @@ const api = {
       ipcRenderer.invoke("schedules:substitute", assignmentId, newPersonId),
     rankSubstitutes: (assignmentId: number): Promise<SubstituteCandidate[]> =>
       ipcRenderer.invoke("schedules:rankSubstitutes", assignmentId),
-    generateForRange: (startDate: string, endDate: string): Promise<BatchGenerationResult> =>
-      ipcRenderer.invoke("schedules:generateForRange", startDate, endDate)
+    generateForRange: (startDate: string, endDate: string, roleIds?: number[]): Promise<BatchGenerationResult> =>
+      ipcRenderer.invoke("schedules:generateForRange", startDate, endDate, roleIds)
   }
 };
 

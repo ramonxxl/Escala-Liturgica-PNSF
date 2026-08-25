@@ -110,7 +110,7 @@ describe("generateAndSaveSchedule", () => {
     const first = generateAndSaveSchedule(db, celebration.id);
     const second = generateAndSaveSchedule(db, celebration.id);
 
-    expect(second.id).not.toBe(first.id);
+    expect(second.id).toBe(first.id); // reaproveita a mesma escala rascunho, so troca as atribuicoes
     expect(second.assignments).toHaveLength(1);
   });
 
@@ -310,5 +310,57 @@ describe("generateAndSaveScheduleForRange", () => {
 
     expect(result.schedules).toHaveLength(0);
     expect(result.skipped).toEqual([{ celebrationId: celebration.id, reason: "Escala já publicada" }]);
+  });
+});
+
+describe("geracao filtrada por funcao", () => {
+  it("gera so a funcao pedida, preservando atribuicoes ja feitas de outras funcoes", () => {
+    const ministroId = createRole(db, { name: "Ministro" }).id;
+    createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    createPerson(db, { fullName: "João", communityId, roleIds: [ministroId] });
+
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [
+        { roleId: leitorId, quantityNeeded: 1 },
+        { roleId: ministroId, quantityNeeded: 1 }
+      ]
+    });
+
+    const leitorOnly = generateAndSaveSchedule(db, celebration.id, [leitorId]);
+    expect(leitorOnly.assignments).toHaveLength(1);
+    expect(leitorOnly.assignments[0].roleName).toBe("Leitor");
+    expect(leitorOnly.unfilled).toEqual([{ celebrationId: celebration.id, roleId: ministroId, missing: 1 }]);
+
+    const both = generateAndSaveSchedule(db, celebration.id, [ministroId]);
+    expect(both.assignments).toHaveLength(2);
+    expect(both.assignments.find((a) => a.roleName === "Leitor")?.personName).toBe("Maria");
+    expect(both.assignments.find((a) => a.roleName === "Ministro")?.personName).toBe("João");
+    expect(both.unfilled).toHaveLength(0);
+  });
+
+  it("filtra por funcao tambem na geracao em lote do periodo", () => {
+    const ministroId = createRole(db, { name: "Ministro" }).id;
+    createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId, ministroId] });
+
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [
+        { roleId: leitorId, quantityNeeded: 1 },
+        { roleId: ministroId, quantityNeeded: 1 }
+      ]
+    });
+
+    const result = generateAndSaveScheduleForRange(db, "2026-08-01", "2026-08-31", [ministroId]);
+
+    expect(result.schedules).toHaveLength(1);
+    expect(result.schedules[0].assignments).toHaveLength(1);
+    expect(result.schedules[0].assignments[0].roleName).toBe("Ministro");
   });
 });
