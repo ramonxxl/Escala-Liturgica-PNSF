@@ -20,7 +20,7 @@ publish:
   # pra voce, e o electron-updater dos usuarios nao enxerga rascunhos).
   # Publicando direto porque o pipeline ja roda os testes antes de chegar
   # aqui — nao ha uma etapa manual de revisao no meio do caminho.
-  draft: false
+  releaseType: release
 win:
   target: nsis
   artifactName: EscalaLiturgica_Setup_v${version}.exe
