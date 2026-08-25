@@ -1,4 +1,4 @@
-import { isEligible, slotKey } from "./eligibility";
+import { dayKey, isEligible, slotKey } from "./eligibility";
 import { computeHistoryStats, scoreCandidate } from "./scoring";
 import type { GenerationInput, GenerationResult, ProposedAssignment, UnfilledSlot } from "./types";
 
@@ -14,13 +14,19 @@ import type { GenerationInput, GenerationResult, ProposedAssignment, UnfilledSlo
  *
  * So sao consideradas escolhas que respeitem as regras obrigatorias (ver
  * eligibility.ts) — nunca escala alguem indisponivel, de ferias, sem a
- * funcao, inativo ou ja ocupado no mesmo horario. Quando nao ha candidatos
- * suficientes, a vaga fica em aberto e e reportada em `unfilled`.
+ * funcao, inativo ou ja escalado nesse mesmo dia (em qualquer outra missa
+ * ou funcao, incluindo escalas ja publicadas fora deste lote). Quando nao
+ * ha candidatos suficientes, a vaga fica em aberto e e reportada em
+ * `unfilled`.
  */
 export function generateSchedule(input: GenerationInput): GenerationResult {
   const assignments: ProposedAssignment[] = [];
   const unfilled: UnfilledSlot[] = [];
   const usedSlots = new Set<string>();
+  const usedDates = new Set<string>();
+  for (const [personId, dates] of Object.entries(input.history.busyDatesByPerson)) {
+    for (const date of dates) usedDates.add(dayKey(Number(personId), date));
+  }
 
   const assignmentCountByPerson: Record<number, number> = { ...input.history.assignmentCountByPerson };
   const lastAssignmentDateByPerson: Record<number, string> = { ...input.history.lastAssignmentDateByPerson };
@@ -33,7 +39,7 @@ export function generateSchedule(input: GenerationInput): GenerationResult {
     const eligibleCountByRole = new Map<number, number>();
     for (const requirement of celebration.requirements) {
       const count = input.people.filter((person) =>
-        isEligible(person, requirement.roleId, celebration.date, celebration.time, input, usedSlots)
+        isEligible(person, requirement.roleId, celebration.date, celebration.time, input, usedDates)
       ).length;
       eligibleCountByRole.set(requirement.roleId, count);
     }
@@ -50,7 +56,7 @@ export function generateSchedule(input: GenerationInput): GenerationResult {
           computeHistoryStats(assignmentCountByPerson);
 
         const candidates = input.people.filter((person) =>
-          isEligible(person, requirement.roleId, celebration.date, celebration.time, input, usedSlots)
+          isEligible(person, requirement.roleId, celebration.date, celebration.time, input, usedDates)
         );
 
         if (candidates.length === 0) break;
@@ -65,7 +71,7 @@ export function generateSchedule(input: GenerationInput): GenerationResult {
                 date: celebration.date,
                 time: celebration.time,
                 availabilityRules: input.availabilityRules,
-                history: { assignmentCountByPerson, lastAssignmentDateByPerson },
+                history: { assignmentCountByPerson, lastAssignmentDateByPerson, busyDatesByPerson: input.history.busyDatesByPerson },
                 averageAssignmentCount,
                 maxAssignmentCount,
                 usedSlots
@@ -85,6 +91,7 @@ export function generateSchedule(input: GenerationInput): GenerationResult {
         });
 
         usedSlots.add(slotKey(chosen.person.id, celebration.date, celebration.time));
+        usedDates.add(dayKey(chosen.person.id, celebration.date));
         assignmentCountByPerson[chosen.person.id] = (assignmentCountByPerson[chosen.person.id] ?? 0) + 1;
         lastAssignmentDateByPerson[chosen.person.id] = celebration.date;
 

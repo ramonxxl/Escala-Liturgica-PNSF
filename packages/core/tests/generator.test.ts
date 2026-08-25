@@ -22,7 +22,7 @@ function baseInput(overrides: Partial<GenerationInput> = {}): GenerationInput {
     people: [],
     availabilityRules: [],
     unavailabilityPeriods: [],
-    history: { assignmentCountByPerson: {}, lastAssignmentDateByPerson: {} },
+    history: { assignmentCountByPerson: {}, lastAssignmentDateByPerson: {}, busyDatesByPerson: {} },
     weights: DEFAULT_SCORING_WEIGHTS,
     ...overrides
   };
@@ -95,6 +95,38 @@ describe("generateSchedule — regras obrigatorias", () => {
     expect(result.unfilled).toHaveLength(1);
   });
 
+  it("nunca escala a mesma pessoa duas vezes no mesmo dia, mesmo em missas/horarios diferentes", () => {
+    const result = generateSchedule(
+      baseInput({
+        celebrations: [
+          { id: 1, date: "2026-08-30", time: "07:00", requirements: [{ roleId: LEITOR, quantityNeeded: 1 }] },
+          { id: 2, date: "2026-08-30", time: "19:30", requirements: [{ roleId: LEITOR, quantityNeeded: 1 }] }
+        ],
+        people: [person(1, [LEITOR])]
+      })
+    );
+    // pessoa 1 e escalada na primeira missa do dia; a segunda fica sem preencher
+    expect(result.assignments).toHaveLength(1);
+    expect(result.assignments[0].celebrationId).toBe(1);
+    expect(result.unfilled).toEqual([{ celebrationId: 2, roleId: LEITOR, missing: 1 }]);
+  });
+
+  it("nunca escala alguem ja ocupado no dia por uma escala publicada fora deste lote", () => {
+    const result = generateSchedule(
+      baseInput({
+        celebrations: [{ id: 1, date: "2026-08-30", time: "19:30", requirements: [{ roleId: LEITOR, quantityNeeded: 1 }] }],
+        people: [person(1, [LEITOR]), person(2, [LEITOR])],
+        history: {
+          assignmentCountByPerson: {},
+          lastAssignmentDateByPerson: {},
+          busyDatesByPerson: { 1: ["2026-08-30"] } // pessoa 1 ja escalada nesse dia em outra missa (fora deste lote)
+        }
+      })
+    );
+    expect(result.assignments).toHaveLength(1);
+    expect(result.assignments[0].personId).toBe(2);
+  });
+
   it("reporta necessidade parcialmente preenchida quando faltam candidatos", () => {
     const result = generateSchedule(
       baseInput({
@@ -129,7 +161,7 @@ describe("generateSchedule — equilibrio e pontuacao", () => {
       baseInput({
         celebrations: [{ id: 1, date: "2026-08-30", time: "19:30", requirements: [{ roleId: LEITOR, quantityNeeded: 1 }] }],
         people: [person(1, [LEITOR]), person(2, [LEITOR])],
-        history: { assignmentCountByPerson: { 1: 10 }, lastAssignmentDateByPerson: {} }
+        history: { assignmentCountByPerson: { 1: 10 }, lastAssignmentDateByPerson: {}, busyDatesByPerson: {} }
       })
     );
     expect(result.assignments[0].personId).toBe(2);
@@ -142,7 +174,8 @@ describe("generateSchedule — equilibrio e pontuacao", () => {
         people: [person(1, [LEITOR]), person(2, [LEITOR])],
         history: {
           assignmentCountByPerson: { 1: 1, 2: 1 },
-          lastAssignmentDateByPerson: { 1: "2026-08-25" } // 5 dias antes, dentro da janela de penalidade
+          lastAssignmentDateByPerson: { 1: "2026-08-25" }, // 5 dias antes, dentro da janela de penalidade
+          busyDatesByPerson: {}
         }
       })
     );

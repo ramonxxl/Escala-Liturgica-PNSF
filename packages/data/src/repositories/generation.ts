@@ -136,24 +136,30 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], 
     db.prepare("SELECT person_id, start_date, end_date FROM unavailabilities").all() as UnavailabilityRow[]
   ).map((row) => ({ personId: row.person_id, startDate: row.start_date, endDate: row.end_date }));
 
+  // exclui as proprias missas sendo (re)geradas: suas atribuicoes atuais serao
+  // substituidas por esta chamada, entao nao devem contar como "ja ocupado" nem
+  // pesar no equilibrio/penalidade de quem esta prestes a ser reescalado nelas.
   const historyRows = db
     .prepare(
       `SELECT sa.person_id as person_id, c.date as celebration_date
        FROM schedule_assignments sa
        JOIN schedules s ON s.id = sa.schedule_id
        JOIN celebrations c ON c.id = s.celebration_id
-       WHERE sa.status != 'declined'`
+       WHERE sa.status != 'declined' AND c.id NOT IN (${placeholders})`
     )
-    .all() as HistoryRow[];
+    .all(...celebrationIds) as HistoryRow[];
 
   const assignmentCountByPerson: Record<number, number> = {};
   const lastAssignmentDateByPerson: Record<number, string> = {};
+  const busyDatesByPerson: Record<number, string[]> = {};
   for (const row of historyRows) {
     assignmentCountByPerson[row.person_id] = (assignmentCountByPerson[row.person_id] ?? 0) + 1;
     const current = lastAssignmentDateByPerson[row.person_id];
     if (!current || row.celebration_date > current) {
       lastAssignmentDateByPerson[row.person_id] = row.celebration_date;
     }
+    const dates = busyDatesByPerson[row.person_id] ?? (busyDatesByPerson[row.person_id] = []);
+    if (!dates.includes(row.celebration_date)) dates.push(row.celebration_date);
   }
 
   return {
@@ -161,7 +167,7 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], 
     people,
     availabilityRules,
     unavailabilityPeriods,
-    history: { assignmentCountByPerson, lastAssignmentDateByPerson },
+    history: { assignmentCountByPerson, lastAssignmentDateByPerson, busyDatesByPerson },
     weights: getScoringWeights(db)
   };
 }
@@ -429,9 +435,9 @@ function computeConflictFlag(
        FROM schedule_assignments sa
        JOIN schedules s ON s.id = sa.schedule_id
        JOIN celebrations c ON c.id = s.celebration_id
-       WHERE sa.person_id = ? AND c.date = ? AND c.time = ? AND sa.id != ?`
+       WHERE sa.person_id = ? AND c.date = ? AND sa.id != ?`
     )
-    .get(personId, celebration.date, celebration.time, excludeAssignmentId ?? -1) as { c: number };
+    .get(personId, celebration.date, excludeAssignmentId ?? -1) as { c: number };
   if (doubleBooked.c > 0) return true;
 
   const weekday = getWeekday(celebration.date);
@@ -520,8 +526,9 @@ export interface SubstituteCandidate {
 /**
  * Ranking de possiveis substitutos para uma atribuicao: pessoas com a mesma
  * funcao, elegiveis (nao indisponiveis, nao de ferias, nao ja escaladas
- * nesse horario), ordenadas pela mesma pontuacao do motor de geracao — com
- * um bonus para quem e da mesma comunidade da missa.
+ * nesse mesmo dia em qualquer outra missa/funcao), ordenadas pela mesma
+ * pontuacao do motor de geracao — com um bonus para quem e da mesma
+ * comunidade da missa.
  */
 export function rankSubstitutes(db: AppDatabase, assignmentId: number): SubstituteCandidate[] {
   const assignment = db
@@ -540,7 +547,23 @@ export function rankSubstitutes(db: AppDatabase, assignmentId: number): Substitu
 
   const input = buildGenerationInput(db, [assignment.celebration_id]);
 
+  // qualquer pessoa ja escalada nesse dia (em qualquer missa/horario) fica de fora — cada um so serve uma vez por dia
   const busyPersonIds = new Set(
+    (
+      db
+        .prepare(
+          `SELECT sa2.person_id as person_id
+           FROM schedule_assignments sa2
+           JOIN schedules s2 ON s2.id = sa2.schedule_id
+           JOIN celebrations c2 ON c2.id = s2.celebration_id
+           WHERE c2.date = ? AND sa2.id != ?`
+        )
+        .all(celebration.date, assignmentId) as { person_id: number }[]
+    ).map((r) => r.person_id)
+  );
+
+  // subconjunto escalado nesse horario exato — usado so pro bonus de conjuge junto (scoreCandidate)
+  const busyAtSameTimeIds = new Set(
     (
       db
         .prepare(
@@ -565,7 +588,7 @@ export function rankSubstitutes(db: AppDatabase, assignmentId: number): Substitu
   // simula o mesmo "usedSlots" que o motor de geracao usaria nessa rodada,
   // pra reaproveitar o bonus de conjuge junto (scoreCandidate) aqui tambem
   const usedSlots = new Set(
-    [...busyPersonIds].map((personId) => slotKey(personId, celebration.date, celebration.time))
+    [...busyAtSameTimeIds].map((personId) => slotKey(personId, celebration.date, celebration.time))
   );
 
   const candidates = input.people.filter(
@@ -580,7 +603,7 @@ export function rankSubstitutes(db: AppDatabase, assignmentId: number): Substitu
   return candidates
     .map((person) => {
       const sameCommunity = communityByPerson.get(person.id) === celebration.community_id;
-      const spouseTogether = person.spousePersonId != null && busyPersonIds.has(person.spousePersonId);
+      const spouseTogether = person.spousePersonId != null && busyAtSameTimeIds.has(person.spousePersonId);
       let score = scoreCandidate(
         person,
         assignment.role_id,

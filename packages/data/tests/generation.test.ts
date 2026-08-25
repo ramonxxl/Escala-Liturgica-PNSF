@@ -245,6 +245,34 @@ describe("rankSubstitutes", () => {
     const ranked = rankSubstitutes(db, schedule.assignments[0].id);
     expect(ranked).toHaveLength(0);
   });
+
+  it("exclui do ranking quem ja esta escalado no mesmo dia em outra missa/horario", () => {
+    createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    const ana = createPerson(db, { fullName: "Ana", communityId, roleIds: [leitorId] });
+
+    const manha = createCelebration(db, {
+      date: "2026-08-30",
+      time: "07:00",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+    const noite = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+
+    const manhaSchedule = generateAndSaveSchedule(db, manha.id);
+    substituteAssignment(db, manhaSchedule.assignments[0].id, ana.id); // forca a Ana a ficar ocupada de manha
+
+    const noiteSchedule = generateAndSaveSchedule(db, noite.id); // so sobra a Maria elegivel
+
+    const ranked = rankSubstitutes(db, noiteSchedule.assignments[0].id);
+    expect(ranked).toHaveLength(0); // a unica outra pessoa (Ana) ja esta ocupada nesse dia
+  });
 });
 
 describe("generateAndSaveScheduleForRange", () => {
@@ -277,6 +305,32 @@ describe("generateAndSaveScheduleForRange", () => {
     );
     // com o lote inteiro, as duas missas devem ir para pessoas diferentes (autoequilibrio)
     expect(byCelebration.get(c1.id)).not.toBe(byCelebration.get(c2.id));
+  });
+
+  it("nunca escala a mesma pessoa em duas missas do mesmo dia, mesmo em horarios diferentes", () => {
+    const maria = createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+
+    const manha = createCelebration(db, {
+      date: "2026-08-30",
+      time: "07:00",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+    const noite = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+
+    const result = generateAndSaveScheduleForRange(db, "2026-08-01", "2026-08-31");
+
+    const byCelebration = new Map(result.schedules.map((s) => [s.celebrationId, s.assignments[0]?.personId]));
+    // so a Maria e elegivel -> escalada numa das duas missas, a outra fica sem preencher
+    const filledCount = [byCelebration.get(manha.id), byCelebration.get(noite.id)].filter((id) => id === maria.id).length;
+    expect(filledCount).toBe(1);
   });
 
   it("ignora missas fora do periodo informado", () => {

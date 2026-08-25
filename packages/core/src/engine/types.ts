@@ -44,6 +44,8 @@ export interface GenerationHistory {
   assignmentCountByPerson: Record<number, number>;
   /** Data da ultima escala da pessoa (usado para evitar escalar em sequencia). */
   lastAssignmentDateByPerson: Record<number, string>;
+  /** Datas em que a pessoa ja tem alguma escala (qualquer missa/funcao) — nunca escalar de novo nessas datas. */
+  busyDatesByPerson: Record<number, string[]>;
 }
 
 export interface GenerationInput {

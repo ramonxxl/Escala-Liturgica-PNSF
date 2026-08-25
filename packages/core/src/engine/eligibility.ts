@@ -25,11 +25,16 @@ export function slotKey(personId: number, date: string, time: string): string {
   return `${personId}|${date}|${time}`;
 }
 
+export function dayKey(personId: number, date: string): string {
+  return `${personId}|${date}`;
+}
+
 /**
  * Regras obrigatorias do motor de geracao (nunca violadas automaticamente):
  * pessoa ativa, com a funcao, nao indisponivel/de ferias naquele dia e
- * horario, e ainda nao usada nesse mesmo horario nesta rodada de geracao
- * (evita escalar a mesma pessoa em duas funcoes/missas simultaneas).
+ * horario, e ainda nao escalada nesse mesmo dia (evita escalar a mesma
+ * pessoa em duas missas/funcoes diferentes no mesmo dia — cada um so pode
+ * servir numa celebracao por dia).
  */
 export function isEligible(
   person: GenerationPerson,
@@ -40,12 +45,12 @@ export function isEligible(
     availabilityRules: GenerationAvailabilityRule[];
     unavailabilityPeriods: GenerationUnavailabilityPeriod[];
   },
-  usedSlots: ReadonlySet<string>
+  usedDates: ReadonlySet<string>
 ): boolean {
   if (!person.active) return false;
   if (!hasRole(person, roleId)) return false;
   if (isOnVacation(person.id, date, input.unavailabilityPeriods)) return false;
   if (isMarkedUnavailable(person.id, date, time, input.availabilityRules)) return false;
-  if (usedSlots.has(slotKey(person.id, date, time))) return false;
+  if (usedDates.has(dayKey(person.id, date))) return false;
   return true;
 }
