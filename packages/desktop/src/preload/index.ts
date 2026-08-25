@@ -7,7 +7,10 @@ import type {
   PersonWithRoles,
   CelebrationInput,
   CelebrationWithRequirements,
+  CreateRecurrenceResult,
   MassSlots,
+  RecurrenceInput,
+  RecurrencePreview,
   AvailabilityInput,
   UnavailabilityInput,
   ScheduleWithAssignments,
@@ -65,7 +68,11 @@ const api = {
     update: (id: number, input: CelebrationInput): Promise<CelebrationWithRequirements> =>
       ipcRenderer.invoke("celebrations:update", id, input),
     remove: (id: number): Promise<void> => ipcRenderer.invoke("celebrations:remove", id),
-    distinctMassSlots: (): Promise<MassSlots> => ipcRenderer.invoke("celebrations:distinctMassSlots")
+    distinctMassSlots: (): Promise<MassSlots> => ipcRenderer.invoke("celebrations:distinctMassSlots"),
+    previewRecurrence: (input: RecurrenceInput): Promise<RecurrencePreview> =>
+      ipcRenderer.invoke("celebrations:previewRecurrence", input),
+    createRecurrence: (input: RecurrenceInput, options: { skipConflicts: boolean }): Promise<CreateRecurrenceResult> =>
+      ipcRenderer.invoke("celebrations:createRecurrence", input, options)
   },
 
   availabilities: {

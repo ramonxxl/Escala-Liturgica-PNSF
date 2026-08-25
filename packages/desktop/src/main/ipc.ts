@@ -28,6 +28,9 @@ import {
   updateCelebration,
   removeCelebration,
   listDistinctMassSlots,
+  previewRecurrence,
+  createRecurrence,
+  type RecurrenceInput,
   listAvailabilitiesByPerson,
   createAvailability,
   removeAvailability,
@@ -90,6 +93,12 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
   );
   ipcMain.handle("celebrations:remove", (_event, id: number) => removeCelebration(db, id));
   ipcMain.handle("celebrations:distinctMassSlots", () => listDistinctMassSlots(db));
+  ipcMain.handle("celebrations:previewRecurrence", (_event, input: RecurrenceInput) => previewRecurrence(db, input));
+  ipcMain.handle(
+    "celebrations:createRecurrence",
+    (_event, input: RecurrenceInput, options: { skipConflicts: boolean }) =>
+      createRecurrence(db, input, options)
+  );
 
   ipcMain.handle("availabilities:listByPerson", (_event, personId: number) =>
     listAvailabilitiesByPerson(db, personId)

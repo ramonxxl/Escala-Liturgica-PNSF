@@ -1,4 +1,4 @@
-import { getWeekday, type Celebration } from "@escala/core";
+import { computeRecurrenceDates, getWeekday, type Celebration } from "@escala/core";
 import type { AppDatabase } from "../sqlAdapter";
 
 export interface RequirementWithRole {
@@ -195,4 +195,114 @@ export function listDistinctMassSlots(db: AppDatabase): MassSlots {
     weekdays: [...weekdaySet].sort((a, b) => a - b),
     times: timeRows.map((row) => row.time)
   };
+}
+
+export interface RecurrenceInput {
+  communityId: number;
+  celebrationType: string;
+  time: string;
+  /** Dias da semana (0=domingo..6=sabado), um ou mais. */
+  weekdays: number[];
+  startDate: string;
+  endDate: string;
+  notes?: string | null;
+  /** Aplicadas em cada missa gerada pela recorrencia. */
+  requirements: CelebrationRequirementInput[];
+}
+
+export interface RecurrencePreview {
+  /** Todas as datas que a regra gera, em ordem. */
+  dates: string[];
+  /** Subconjunto de `dates` que ja tem uma missa cadastrada (mesma comunidade e horario). */
+  conflicts: string[];
+}
+
+function findConflictingDates(db: AppDatabase, communityId: number, time: string, dates: string[]): string[] {
+  if (dates.length === 0) return [];
+  const placeholders = dates.map(() => "?").join(",");
+  return (
+    db
+      .prepare(`SELECT date FROM celebrations WHERE community_id = ? AND time = ? AND date IN (${placeholders})`)
+      .all(communityId, time, ...dates) as { date: string }[]
+  ).map((row) => row.date);
+}
+
+/** Calcula as datas que uma recorrencia geraria e quais delas ja colidem com missas existentes — sem escrever nada. */
+export function previewRecurrence(db: AppDatabase, input: RecurrenceInput): RecurrencePreview {
+  const dates = computeRecurrenceDates(input.startDate, input.endDate, input.weekdays);
+  const conflicts = findConflictingDates(db, input.communityId, input.time, dates);
+  return { dates, conflicts };
+}
+
+export interface CreateRecurrenceResult {
+  recurrenceId: number;
+  createdCount: number;
+  skippedCount: number;
+}
+
+/**
+ * Cria a regra de recorrencia e todas as missas correspondentes (cada uma com
+ * as mesmas necessidades) numa unica transacao — se algo falhar, nada fica
+ * salvo. Se houver datas que ja colidem com missas existentes (mesma
+ * comunidade+horario), `skipConflicts: false` aborta sem escrever nada;
+ * `skipConflicts: true` cria as demais e pula so as conflitantes.
+ */
+export function createRecurrence(
+  db: AppDatabase,
+  input: RecurrenceInput,
+  options: { skipConflicts: boolean }
+): CreateRecurrenceResult {
+  const create = db.transaction((data: RecurrenceInput) => {
+    const dates = computeRecurrenceDates(data.startDate, data.endDate, data.weekdays);
+    if (dates.length === 0) {
+      throw new Error("Nenhuma data no período bate com os dias da semana selecionados.");
+    }
+
+    const conflicts = new Set(findConflictingDates(db, data.communityId, data.time, dates));
+    if (conflicts.size > 0 && !options.skipConflicts) {
+      throw new Error(
+        `Já existe${conflicts.size > 1 ? "m" : ""} ${conflicts.size} missa(s) cadastrada(s) nessa comunidade e horário em datas do período.`
+      );
+    }
+
+    const recurrenceResult = db
+      .prepare(
+        `INSERT INTO celebration_recurrences (community_id, celebration_type, time, weekdays, start_date, end_date, notes)
+         VALUES (@communityId, @celebrationType, @time, @weekdays, @startDate, @endDate, @notes)`
+      )
+      .run({
+        communityId: data.communityId,
+        celebrationType: data.celebrationType,
+        time: data.time,
+        weekdays: JSON.stringify(data.weekdays),
+        startDate: data.startDate,
+        endDate: data.endDate,
+        notes: data.notes ?? null
+      });
+    const recurrenceId = recurrenceResult.lastInsertRowid;
+
+    let createdCount = 0;
+    for (const date of dates) {
+      if (conflicts.has(date)) continue;
+      const celebrationResult = db
+        .prepare(
+          `INSERT INTO celebrations (date, time, community_id, celebration_type, notes, recurrence_id)
+           VALUES (@date, @time, @communityId, @celebrationType, @notes, @recurrenceId)`
+        )
+        .run({
+          date,
+          time: data.time,
+          communityId: data.communityId,
+          celebrationType: data.celebrationType,
+          notes: data.notes ?? null,
+          recurrenceId
+        });
+      syncRequirements(db, celebrationResult.lastInsertRowid, data.requirements);
+      createdCount++;
+    }
+
+    return { recurrenceId, createdCount, skippedCount: conflicts.size };
+  });
+
+  return create(input);
 }

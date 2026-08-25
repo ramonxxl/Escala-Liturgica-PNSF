@@ -7,11 +7,14 @@ import { createCommunity } from "../src/repositories/communities";
 import { createRole } from "../src/repositories/roles";
 import {
   createCelebration,
+  createRecurrence,
   getCelebration,
   listCelebrations,
   listDistinctMassSlots,
+  previewRecurrence,
   removeCelebration,
-  updateCelebration
+  updateCelebration,
+  type RecurrenceInput
 } from "../src/repositories/celebrations";
 
 let dir: string;
@@ -134,5 +137,88 @@ describe("celebrationsRepository", () => {
     const slots = listDistinctMassSlots(db);
     expect(slots.weekdays).toEqual([0, 3]); // domingo e quarta, ordenados
     expect(slots.times).toEqual(["07:00", "19:30"]);
+  });
+});
+
+describe("recorrencia de missas", () => {
+  function baseRecurrence(overrides: Partial<RecurrenceInput> = {}): RecurrenceInput {
+    return {
+      communityId,
+      celebrationType: "Missa Dominical",
+      time: "10:00",
+      weekdays: [0], // domingo
+      startDate: "2026-08-30",
+      endDate: "2026-09-27",
+      requirements: [{ roleId: leitorId, quantityNeeded: 2 }],
+      ...overrides
+    };
+  }
+
+  it("previewRecurrence calcula as datas e identifica conflito com missa existente", () => {
+    createCelebration(db, {
+      date: "2026-09-13",
+      time: "10:00",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: []
+    });
+
+    const preview = previewRecurrence(db, baseRecurrence());
+
+    expect(preview.dates).toEqual(["2026-08-30", "2026-09-06", "2026-09-13", "2026-09-20", "2026-09-27"]);
+    expect(preview.conflicts).toEqual(["2026-09-13"]);
+  });
+
+  it("createRecurrence cria uma missa por data, todas com as mesmas necessidades", () => {
+    const result = createRecurrence(db, baseRecurrence(), { skipConflicts: false });
+
+    expect(result.createdCount).toBe(5);
+    expect(result.skippedCount).toBe(0);
+
+    const list = listCelebrations(db);
+    expect(list).toHaveLength(5);
+    expect(list.map((c) => c.date)).toEqual(["2026-08-30", "2026-09-06", "2026-09-13", "2026-09-20", "2026-09-27"]);
+    for (const celebration of list) {
+      expect(celebration.requirements).toEqual([{ roleId: leitorId, roleName: "Leitor", quantityNeeded: 2 }]);
+    }
+
+    const recurrenceRow = db.prepare("SELECT recurrence_id FROM celebrations WHERE date = ?").get("2026-08-30") as {
+      recurrence_id: number;
+    };
+    expect(recurrenceRow.recurrence_id).toBe(result.recurrenceId);
+  });
+
+  it("nao escreve nada quando ha conflito e skipConflicts e false (transacao abortada)", () => {
+    createCelebration(db, {
+      date: "2026-09-13",
+      time: "10:00",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: []
+    });
+
+    expect(() => createRecurrence(db, baseRecurrence(), { skipConflicts: false })).toThrow();
+
+    // so a missa original (o conflito) continua no banco — nada da recorrencia foi criado
+    expect(listCelebrations(db)).toHaveLength(1);
+    const recurrenceCount = db.prepare("SELECT COUNT(*) as c FROM celebration_recurrences").get() as { c: number };
+    expect(recurrenceCount.c).toBe(0);
+  });
+
+  it("com skipConflicts true, cria as demais e pula so a que ja existe", () => {
+    createCelebration(db, {
+      date: "2026-09-13",
+      time: "10:00",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: []
+    });
+
+    const result = createRecurrence(db, baseRecurrence(), { skipConflicts: true });
+
+    expect(result.createdCount).toBe(4);
+    expect(result.skippedCount).toBe(1);
+    // 4 criadas pela recorrencia + 1 que ja existia antes
+    expect(listCelebrations(db)).toHaveLength(5);
   });
 });
