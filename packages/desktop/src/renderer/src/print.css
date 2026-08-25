@@ -1,0 +1,20 @@
+/* Ao imprimir, mostra so o conteudo dentro de #print-report — esconde o
+   menu lateral, cabecalho e qualquer controle da tela (botoes, campos). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-report,
+  #print-report * {
+    visibility: visible;
+  }
+  #print-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .report-entry {
+    break-inside: avoid;
+  }
+}

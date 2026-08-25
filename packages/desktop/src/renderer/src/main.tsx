@@ -5,6 +5,7 @@ import { Notifications } from "@mantine/notifications";
 import { HashRouter } from "react-router-dom";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
+import "./print.css";
 import App from "./App";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

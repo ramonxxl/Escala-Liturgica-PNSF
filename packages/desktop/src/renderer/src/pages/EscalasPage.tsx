@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Alert,
   Badge,
@@ -35,6 +36,7 @@ function currentMonthRange(): { start: string; end: string } {
 }
 
 export default function EscalasPage(): JSX.Element {
+  const navigate = useNavigate();
   const [celebrations, setCelebrations] = useState<CelebrationWithRequirements[]>([]);
   const [people, setPeople] = useState<PersonWithRoles[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -216,6 +218,13 @@ export default function EscalasPage(): JSX.Element {
           </Button>
           <Button onClick={handleGenerateRange} loading={generatingRange} disabled={!rangeStart || !rangeEnd}>
             Gerar escala do período
+          </Button>
+          <Button
+            variant="light"
+            disabled={!rangeStart || !rangeEnd}
+            onClick={() => navigate(`/relatorio?start=${rangeStart}&end=${rangeEnd}`)}
+          >
+            Ver relatório para impressão
           </Button>
         </Group>
       </Paper>
