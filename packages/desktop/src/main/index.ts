@@ -1,7 +1,8 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import { join } from "path";
 import { openDatabase, type AppDatabase } from "@escala/data";
 import { registerIpcHandlers } from "./ipc";
+import { setupAutoUpdater } from "./updater";
 
 let db: AppDatabase;
 
@@ -33,8 +34,10 @@ app.whenReady().then(async () => {
   db = await openDatabase(dbPath);
 
   registerIpcHandlers(db, dbPath);
+  ipcMain.handle("app:version", () => app.getVersion());
 
   createWindow();
+  setupAutoUpdater();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

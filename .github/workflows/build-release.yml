@@ -1,0 +1,63 @@
+name: Build e Release
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Rodar a suíte de testes
+        # Roda antes de gerar o instalador: se algo quebrou, a build para
+        # aqui e nao chega a publicar um release ruim.
+        run: npm test
+
+      - name: Calcular a versão desta build
+        # MAJOR.MINOR vem do arquivo VERSION (versionado no repositorio,
+        # ajustado a mao quando uma mudanca realmente merece um novo
+        # major/minor); PATCH e o numero sequencial da propria Action,
+        # entao toda build ja gera uma versao nova e unica sem precisar
+        # editar o VERSION a cada push.
+        shell: pwsh
+        run: |
+          $base = (Get-Content VERSION -Raw).Trim()
+          $versao = "$base.${{ github.run_number }}"
+          "VERSAO=$versao" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          $pkgPath = "packages/desktop/package.json"
+          $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
+          $pkg.version = $versao
+          $pkg | ConvertTo-Json -Depth 10 | Set-Content -Path $pkgPath -Encoding utf8
+
+      - name: Build (core, data, main/preload/renderer)
+        run: |
+          npm run build:libs
+          npm run build --workspace=@escala/desktop
+
+      - name: Gerar e publicar o instalador
+        # electron-builder cria o Release no GitHub (tag v<versao>), sobe o
+        # instalador e gera o latest.yml que o electron-updater usa pra
+        # descobrir que ha uma versao nova.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: packages/desktop
+        run: npx electron-builder --win --publish always

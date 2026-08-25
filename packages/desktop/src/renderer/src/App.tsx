@@ -1,4 +1,5 @@
-import { AppShell, NavLink, Text, Title } from "@mantine/core";
+import { useEffect, useState } from "react";
+import { AppShell, Group, NavLink, Text, Title } from "@mantine/core";
 import { Link, Route, Routes, useLocation } from "react-router-dom";
 import DashboardPage from "./pages/DashboardPage";
 import ComunidadesPage from "./pages/ComunidadesPage";
@@ -25,13 +26,23 @@ const NAV_ITEMS = [
 
 export default function App(): JSX.Element {
   const location = useLocation();
+  const [version, setVersion] = useState("");
+
+  useEffect(() => {
+    window.api.version().then(setVersion);
+  }, []);
 
   return (
     <AppShell header={{ height: 56 }} navbar={{ width: 240, breakpoint: "sm" }} padding="md">
       <AppShell.Header>
-        <Title order={4} px="md" py="xs">
-          EscalaLitúrgica
-        </Title>
+        <Group justify="space-between" px="md" py="xs">
+          <Title order={4}>EscalaLitúrgica</Title>
+          {version && (
+            <Text size="xs" c="dimmed">
+              v{version}
+            </Text>
+          )}
+        </Group>
       </AppShell.Header>
 
       <AppShell.Navbar p="xs">

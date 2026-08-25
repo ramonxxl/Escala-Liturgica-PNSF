@@ -11,7 +11,7 @@
     "dev": "npm run build:libs && npm run dev --workspace=@escala/desktop",
     "build": "npm run build:libs && npm run build --workspace=@escala/desktop",
     "build:win": "npm run build:libs && npm run build:win --workspace=@escala/desktop",
-    "test": "npm run test --workspace=@escala/core",
+    "test": "npm run test --workspace=@escala/core && npm run test --workspace=@escala/data",
     "seed": "npm run build:libs && node scripts/seed-dev-data.js",
     "add-people": "npm run build:libs && node scripts/add-people.js",
     "add-communities": "npm run build:libs && node scripts/add-communities.js"

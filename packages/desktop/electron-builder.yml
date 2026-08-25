@@ -7,9 +7,13 @@ directories:
 files:
   - out/**/*
   - package.json
+publish:
+  provider: github
+  owner: ramonxxl
+  repo: Escala-Liturgica-PNSF
 win:
   target: nsis
-  artifactName: EscalaLiturgica_Setup.exe
+  artifactName: EscalaLiturgica_Setup_v${version}.exe
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

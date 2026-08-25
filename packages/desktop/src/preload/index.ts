@@ -22,6 +22,7 @@ import type {
 // Node/Electron/SQLite diretamente — apenas estes metodos via IPC.
 const api = {
   ping: (): Promise<string> => ipcRenderer.invoke("app:ping"),
+  version: (): Promise<string> => ipcRenderer.invoke("app:version"),
   dbStatus: (): Promise<{ ok: boolean; path: string; settingsCount: number }> =>
     ipcRenderer.invoke("db:status"),
 
