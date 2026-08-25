@@ -39,7 +39,10 @@ import {
   addAssignment,
   removeAssignment,
   substituteAssignment,
-  rankSubstitutes
+  rankSubstitutes,
+  setAssignmentStatus,
+  getDashboardSummary,
+  getAssignmentHistory
 } from "@escala/data";
 
 export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
@@ -110,4 +113,12 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
   ipcMain.handle("schedules:generateForRange", (_event, startDate: string, endDate: string, roleIds?: number[]) =>
     generateAndSaveScheduleForRange(db, startDate, endDate, roleIds)
   );
+  ipcMain.handle(
+    "schedules:setAssignmentStatus",
+    (_event, assignmentId: number, status: "proposed" | "confirmed" | "declined") =>
+      setAssignmentStatus(db, assignmentId, status)
+  );
+
+  ipcMain.handle("dashboard:summary", () => getDashboardSummary(db));
+  ipcMain.handle("history:summary", () => getAssignmentHistory(db));
 }

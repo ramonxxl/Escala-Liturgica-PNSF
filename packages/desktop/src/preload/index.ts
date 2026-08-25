@@ -12,7 +12,9 @@ import type {
   ScheduleWithAssignments,
   PersistedAssignment,
   SubstituteCandidate,
-  BatchGenerationResult
+  BatchGenerationResult,
+  DashboardSummary,
+  HistorySummary
 } from "@escala/data";
 
 // Superficie minima exposta ao renderer. O renderer nunca acessa
@@ -90,7 +92,19 @@ const api = {
     rankSubstitutes: (assignmentId: number): Promise<SubstituteCandidate[]> =>
       ipcRenderer.invoke("schedules:rankSubstitutes", assignmentId),
     generateForRange: (startDate: string, endDate: string, roleIds?: number[]): Promise<BatchGenerationResult> =>
-      ipcRenderer.invoke("schedules:generateForRange", startDate, endDate, roleIds)
+      ipcRenderer.invoke("schedules:generateForRange", startDate, endDate, roleIds),
+    setAssignmentStatus: (
+      assignmentId: number,
+      status: "proposed" | "confirmed" | "declined"
+    ): Promise<PersistedAssignment> => ipcRenderer.invoke("schedules:setAssignmentStatus", assignmentId, status)
+  },
+
+  dashboard: {
+    summary: (): Promise<DashboardSummary> => ipcRenderer.invoke("dashboard:summary")
+  },
+
+  history: {
+    summary: (): Promise<HistorySummary> => ipcRenderer.invoke("history:summary")
   }
 };
 

@@ -470,6 +470,19 @@ export function removeAssignment(db: AppDatabase, assignmentId: number): void {
   db.prepare("DELETE FROM schedule_assignments WHERE id = ?").run(assignmentId);
 }
 
+/** Marca a confirmacao de participacao do integrante nessa atribuicao (ou volta para pendente). */
+export function setAssignmentStatus(
+  db: AppDatabase,
+  assignmentId: number,
+  status: "proposed" | "confirmed" | "declined"
+): PersistedAssignment {
+  db.prepare("UPDATE schedule_assignments SET status = @status, updated_at = datetime('now') WHERE id = @id").run({
+    id: assignmentId,
+    status
+  });
+  return getAssignmentById(db, assignmentId);
+}
+
 /** Troca a pessoa escalada numa atribuicao existente, mantendo a mesma funcao/vaga. */
 export function substituteAssignment(db: AppDatabase, assignmentId: number, newPersonId: number): PersistedAssignment {
   const row = db.prepare("SELECT schedule_id FROM schedule_assignments WHERE id = ?").get(assignmentId) as

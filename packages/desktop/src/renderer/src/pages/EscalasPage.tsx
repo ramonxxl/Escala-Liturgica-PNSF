@@ -120,6 +120,14 @@ export default function EscalasPage(): JSX.Element {
     if (celebrationId) await refreshSchedule(celebrationId);
   };
 
+  const handleSetStatus = async (
+    assignment: PersistedAssignment,
+    status: "proposed" | "confirmed" | "declined"
+  ): Promise<void> => {
+    await window.api.schedules.setAssignmentStatus(assignment.id, status);
+    if (celebrationId) await refreshSchedule(celebrationId);
+  };
+
   const handleAddPerson = async (roleId: number): Promise<void> => {
     if (!schedule) return;
     const personId = addPersonByRole[roleId];
@@ -294,6 +302,7 @@ export default function EscalasPage(): JSX.Element {
                   <Table.Th>Função</Table.Th>
                   <Table.Th>Integrante</Table.Th>
                   <Table.Th>Pontuação</Table.Th>
+                  <Table.Th>Status</Table.Th>
                   <Table.Th />
                 </Table.Tr>
               </Table.Thead>
@@ -314,7 +323,44 @@ export default function EscalasPage(): JSX.Element {
                       </Table.Td>
                       <Table.Td>{assignment.score}</Table.Td>
                       <Table.Td>
+                        <Badge
+                          color={
+                            assignment.status === "confirmed"
+                              ? "green"
+                              : assignment.status === "declined"
+                                ? "red"
+                                : "gray"
+                          }
+                          variant="light"
+                        >
+                          {assignment.status === "confirmed"
+                            ? "Confirmado"
+                            : assignment.status === "declined"
+                              ? "Recusado"
+                              : "Pendente"}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
                         <Group gap="xs" justify="flex-end">
+                          {assignment.status !== "confirmed" && (
+                            <Button
+                              variant="subtle"
+                              color="green"
+                              size="xs"
+                              onClick={() => handleSetStatus(assignment, "confirmed")}
+                            >
+                              Confirmar
+                            </Button>
+                          )}
+                          {assignment.status !== "proposed" && (
+                            <Button
+                              variant="subtle"
+                              size="xs"
+                              onClick={() => handleSetStatus(assignment, "proposed")}
+                            >
+                              Marcar pendente
+                            </Button>
+                          )}
                           <Button variant="subtle" size="xs" onClick={() => openSubstituteModal(assignment)}>
                             Substituir
                           </Button>

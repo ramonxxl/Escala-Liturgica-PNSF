@@ -6,3 +6,5 @@ export * from "./repositories/celebrations";
 export * from "./repositories/availabilities";
 export * from "./repositories/unavailabilities";
 export * from "./repositories/generation";
+export * from "./repositories/dashboard";
+export * from "./repositories/history";
