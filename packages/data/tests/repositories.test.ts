@@ -11,7 +11,7 @@ import {
   updateCommunity
 } from "../src/repositories/communities";
 import { createRole, listRoles } from "../src/repositories/roles";
-import { createPerson, listPeople, removePerson, updatePerson } from "../src/repositories/people";
+import { createPerson, getPerson, listPeople, removePerson, updatePerson } from "../src/repositories/people";
 
 let dir: string;
 let db: AppDatabase;
@@ -94,5 +94,42 @@ describe("peopleRepository", () => {
     const person = createPerson(db, { fullName: "Carlos", roleIds: [] });
     removePerson(db, person.id);
     expect(listPeople(db)).toHaveLength(0);
+  });
+});
+
+describe("vinculo de conjuge", () => {
+  it("cria o vinculo dos dois lados ao definir o conjuge", () => {
+    const maria = createPerson(db, { fullName: "Maria", roleIds: [] });
+    const joao = createPerson(db, { fullName: "João", roleIds: [] });
+
+    const updated = updatePerson(db, maria.id, { fullName: "Maria", roleIds: [], spousePersonId: joao.id });
+
+    expect(updated.spousePersonId).toBe(joao.id);
+    expect(updated.spouseName).toBe("João");
+    expect(getPerson(db, joao.id)?.spousePersonId).toBe(maria.id);
+  });
+
+  it("trocar de conjuge desfaz o vinculo anterior dos dois lados", () => {
+    const maria = createPerson(db, { fullName: "Maria", roleIds: [] });
+    const joao = createPerson(db, { fullName: "João", roleIds: [] });
+    const carlos = createPerson(db, { fullName: "Carlos", roleIds: [] });
+
+    updatePerson(db, maria.id, { fullName: "Maria", roleIds: [], spousePersonId: joao.id });
+    updatePerson(db, maria.id, { fullName: "Maria", roleIds: [], spousePersonId: carlos.id });
+
+    expect(getPerson(db, maria.id)?.spousePersonId).toBe(carlos.id);
+    expect(getPerson(db, carlos.id)?.spousePersonId).toBe(maria.id);
+    expect(getPerson(db, joao.id)?.spousePersonId).toBeNull(); // vinculo antigo desfeito
+  });
+
+  it("remover o conjuge (definir como null) desfaz o vinculo dos dois lados", () => {
+    const maria = createPerson(db, { fullName: "Maria", roleIds: [] });
+    const joao = createPerson(db, { fullName: "João", roleIds: [] });
+
+    updatePerson(db, maria.id, { fullName: "Maria", roleIds: [], spousePersonId: joao.id });
+    updatePerson(db, maria.id, { fullName: "Maria", roleIds: [], spousePersonId: null });
+
+    expect(getPerson(db, maria.id)?.spousePersonId).toBeNull();
+    expect(getPerson(db, joao.id)?.spousePersonId).toBeNull();
   });
 });

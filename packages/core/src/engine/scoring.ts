@@ -1,4 +1,5 @@
 import { daysBetween, getWeekday } from "../domain/dateUtils";
+import { slotKey } from "./eligibility";
 import type { ScoringWeights } from "./scoringWeights";
 import type { GenerationAvailabilityRule, GenerationHistory, GenerationPerson } from "./types";
 
@@ -28,6 +29,8 @@ export interface ScoringContext {
   history: GenerationHistory;
   averageAssignmentCount: number;
   maxAssignmentCount: number;
+  /** Quem ja foi escalado em qual horario nesta rodada (chave via slotKey) — usado para o bonus de conjuge junto. */
+  usedSlots: ReadonlySet<string>;
 }
 
 /**
@@ -59,6 +62,11 @@ export function scoreCandidate(
 
   const preference = person.roles.find((r) => r.roleId === roleId)?.preferenceWeight ?? 0;
   score += preference;
+
+  if (person.spousePersonId && ctx.usedSlots.has(slotKey(person.spousePersonId, ctx.date, ctx.time))) {
+    // conjuge ja escalado nesse mesmo horario — casais preferem servir juntos
+    score += weights.spouseTogetherBonus;
+  }
 
   const lastDate = ctx.history.lastAssignmentDateByPerson[person.id];
   if (lastDate && Math.abs(daysBetween(lastDate, ctx.date)) <= RECENTLY_ASSIGNED_WINDOW_DAYS) {

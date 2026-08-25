@@ -7,6 +7,7 @@ export interface ScoringWeights {
   available: number;
   fewRecentAssignments: number;
   timeSlotPreference: number;
+  spouseTogetherBonus: number;
   recentlyAssignedPenalty: number;
   overloadPenalty: number;
   conflictPenalty: number;
@@ -17,6 +18,7 @@ export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
   available: 10,
   fewRecentAssignments: 8,
   timeSlotPreference: 5,
+  spouseTogetherBonus: 6,
   recentlyAssignedPenalty: -10,
   overloadPenalty: -20,
   conflictPenalty: -100,

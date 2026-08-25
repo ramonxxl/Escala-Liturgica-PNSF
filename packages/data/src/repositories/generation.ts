@@ -7,6 +7,7 @@ import {
   isMarkedUnavailable,
   isOnVacation,
   scoreCandidate,
+  slotKey,
   type GenerationAvailabilityRule,
   type GenerationCelebration,
   type GenerationInput,
@@ -22,6 +23,7 @@ interface PersonRow {
   id: number;
   full_name: string;
   active: number;
+  spouse_person_id: number | null;
 }
 
 interface PersonRoleRow {
@@ -102,7 +104,9 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], 
     requirements: requirementsByCelebration.get(row.id) ?? []
   }));
 
-  const personRows = db.prepare("SELECT id, full_name, active FROM people WHERE active = 1").all() as PersonRow[];
+  const personRows = db
+    .prepare("SELECT id, full_name, active, spouse_person_id FROM people WHERE active = 1")
+    .all() as PersonRow[];
   const roleRows = db
     .prepare("SELECT person_id, role_id, preference_weight FROM person_roles")
     .all() as PersonRoleRow[];
@@ -118,7 +122,8 @@ export function buildGenerationInput(db: AppDatabase, celebrationIds: number[], 
     id: row.id,
     fullName: row.full_name,
     active: row.active === 1,
-    roles: rolesByPerson.get(row.id) ?? []
+    roles: rolesByPerson.get(row.id) ?? [],
+    spousePersonId: row.spouse_person_id
   }));
 
   const availabilityRules: GenerationAvailabilityRule[] = (
@@ -509,6 +514,7 @@ export interface SubstituteCandidate {
   personName: string;
   score: number;
   sameCommunity: boolean;
+  spouseTogether: boolean;
 }
 
 /**
@@ -556,6 +562,12 @@ export function rankSubstitutes(db: AppDatabase, assignmentId: number): Substitu
 
   const { average, max } = computeHistoryStats(input.history.assignmentCountByPerson);
 
+  // simula o mesmo "usedSlots" que o motor de geracao usaria nessa rodada,
+  // pra reaproveitar o bonus de conjuge junto (scoreCandidate) aqui tambem
+  const usedSlots = new Set(
+    [...busyPersonIds].map((personId) => slotKey(personId, celebration.date, celebration.time))
+  );
+
   const candidates = input.people.filter(
     (person) =>
       person.id !== assignment.person_id &&
@@ -568,6 +580,7 @@ export function rankSubstitutes(db: AppDatabase, assignmentId: number): Substitu
   return candidates
     .map((person) => {
       const sameCommunity = communityByPerson.get(person.id) === celebration.community_id;
+      const spouseTogether = person.spousePersonId != null && busyPersonIds.has(person.spousePersonId);
       let score = scoreCandidate(
         person,
         assignment.role_id,
@@ -577,12 +590,13 @@ export function rankSubstitutes(db: AppDatabase, assignmentId: number): Substitu
           availabilityRules: input.availabilityRules,
           history: input.history,
           averageAssignmentCount: average,
-          maxAssignmentCount: max
+          maxAssignmentCount: max,
+          usedSlots
         },
         input.weights
       );
       if (sameCommunity) score += 3;
-      return { personId: person.id, personName: person.fullName, score, sameCommunity };
+      return { personId: person.id, personName: person.fullName, score, sameCommunity, spouseTogether };
     })
     .sort((a, b) => b.score - a.score);
 }

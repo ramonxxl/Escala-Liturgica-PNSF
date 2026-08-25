@@ -17,6 +17,8 @@ export interface Person {
   communityId: number | null;
   active: boolean;
   notes: string | null;
+  /** Conjuge (outro integrante) — vinculo simetrico, usado para preferir escalar os dois juntos. */
+  spousePersonId: number | null;
 }
 
 export interface Role {

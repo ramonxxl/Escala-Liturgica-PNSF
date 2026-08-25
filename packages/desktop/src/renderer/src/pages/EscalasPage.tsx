@@ -182,6 +182,17 @@ export default function EscalasPage(): JSX.Element {
     [schedule]
   );
 
+  const personById = useMemo(() => {
+    const map = new Map<number, PersonWithRoles>();
+    for (const p of people) map.set(p.id, p);
+    return map;
+  }, [people]);
+
+  const isSpouseAlsoAssigned = (personId: number): boolean => {
+    const spouseId = personById.get(personId)?.spousePersonId;
+    return spouseId != null && assignedPersonIds.has(spouseId);
+  };
+
   const peopleForRole = (roleId: number): { value: string; label: string }[] =>
     people
       .filter((p) => p.active && !assignedPersonIds.has(p.id) && p.roles.some((r) => r.id === roleId))
@@ -314,6 +325,11 @@ export default function EscalasPage(): JSX.Element {
                       <Table.Td>
                         <Group gap={6}>
                           {assignment.personName}
+                          {isSpouseAlsoAssigned(assignment.personId) && (
+                            <Badge color="pink" variant="light" size="sm">
+                              💑 com cônjuge
+                            </Badge>
+                          )}
                           {assignment.conflictFlag && (
                             <Badge color="red" variant="light" size="sm">
                               ⚠️ conflito

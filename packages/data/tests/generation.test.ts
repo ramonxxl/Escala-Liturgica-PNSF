@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openDatabase, type AppDatabase } from "../src/db";
 import { createCommunity } from "../src/repositories/communities";
 import { createRole } from "../src/repositories/roles";
-import { createPerson } from "../src/repositories/people";
+import { createPerson, updatePerson } from "../src/repositories/people";
 import { createCelebration } from "../src/repositories/celebrations";
 import { createAvailability } from "../src/repositories/availabilities";
 import { createUnavailability } from "../src/repositories/unavailabilities";
@@ -362,5 +362,37 @@ describe("geracao filtrada por funcao", () => {
     expect(result.schedules).toHaveLength(1);
     expect(result.schedules[0].assignments).toHaveLength(1);
     expect(result.schedules[0].assignments[0].roleName).toBe("Ministro");
+  });
+});
+
+describe("conjuge junto na geracao", () => {
+  it("prioriza escalar o conjuge quando ele ja foi escalado na mesma missa", () => {
+    const ministroId = createRole(db, { name: "Ministro" }).id;
+    const maria = createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    const joao = createPerson(db, { fullName: "João", communityId, roleIds: [ministroId] });
+    const ana = createPerson(db, { fullName: "Ana", communityId, roleIds: [ministroId] });
+
+    updatePerson(db, maria.id, {
+      fullName: "Maria",
+      communityId,
+      roleIds: [leitorId],
+      spousePersonId: joao.id
+    });
+
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [
+        { roleId: leitorId, quantityNeeded: 1 }, // so a Maria e elegivel -> escalada primeiro
+        { roleId: ministroId, quantityNeeded: 1 } // João e Ana empatados, exceto o conjuge
+      ]
+    });
+
+    const schedule = generateAndSaveSchedule(db, celebration.id);
+
+    const ministro = schedule.assignments.find((a) => a.roleName === "Ministro");
+    expect(ministro?.personName).toBe("João");
   });
 });

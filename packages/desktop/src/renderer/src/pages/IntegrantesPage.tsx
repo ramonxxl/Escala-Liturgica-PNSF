@@ -24,11 +24,20 @@ interface FormValues {
   phone: string;
   email: string;
   communityId: string | null;
+  spousePersonId: string | null;
   notes: string;
   roleIds: string[];
 }
 
-const EMPTY_FORM: FormValues = { fullName: "", phone: "", email: "", communityId: null, notes: "", roleIds: [] };
+const EMPTY_FORM: FormValues = {
+  fullName: "",
+  phone: "",
+  email: "",
+  communityId: null,
+  spousePersonId: null,
+  notes: "",
+  roleIds: []
+};
 
 export default function IntegrantesPage(): JSX.Element {
   const [people, setPeople] = useState<PersonWithRoles[]>([]);
@@ -72,6 +81,7 @@ export default function IntegrantesPage(): JSX.Element {
       phone: person.phone ?? "",
       email: person.email ?? "",
       communityId: person.communityId ? String(person.communityId) : null,
+      spousePersonId: person.spousePersonId ? String(person.spousePersonId) : null,
       notes: person.notes ?? "",
       roleIds: person.roles.map((role) => String(role.id))
     });
@@ -84,6 +94,7 @@ export default function IntegrantesPage(): JSX.Element {
       phone: values.phone.trim() || null,
       email: values.email.trim() || null,
       communityId: values.communityId ? Number(values.communityId) : null,
+      spousePersonId: values.spousePersonId ? Number(values.spousePersonId) : null,
       notes: values.notes.trim() || null,
       roleIds: values.roleIds.map(Number)
     };
@@ -131,6 +142,7 @@ export default function IntegrantesPage(): JSX.Element {
           <Table.Tr>
             <Table.Th>Nome</Table.Th>
             <Table.Th>Comunidade</Table.Th>
+            <Table.Th>Cônjuge</Table.Th>
             <Table.Th>Funções</Table.Th>
             <Table.Th>Ativo</Table.Th>
             <Table.Th />
@@ -141,6 +153,7 @@ export default function IntegrantesPage(): JSX.Element {
             <Table.Tr key={person.id}>
               <Table.Td>{person.fullName}</Table.Td>
               <Table.Td>{person.communityName || "—"}</Table.Td>
+              <Table.Td>{person.spouseName ? `💑 ${person.spouseName}` : "—"}</Table.Td>
               <Table.Td>
                 <Group gap={4}>
                   {person.roles.length === 0 && <Text c="dimmed">—</Text>}
@@ -168,7 +181,7 @@ export default function IntegrantesPage(): JSX.Element {
           ))}
           {people.length === 0 && (
             <Table.Tr>
-              <Table.Td colSpan={5}>
+              <Table.Td colSpan={6}>
                 <Text c="dimmed" ta="center">
                   Nenhum integrante cadastrado.
                 </Text>
@@ -199,6 +212,17 @@ export default function IntegrantesPage(): JSX.Element {
               clearable
               data={communities.map((c) => ({ value: String(c.id), label: c.name }))}
               {...form.getInputProps("communityId")}
+            />
+            <Select
+              label="Cônjuge"
+              description="Se marcados como casal, o gerador de escala prioriza escalar os dois na mesma missa"
+              placeholder="Opcional"
+              clearable
+              searchable
+              data={people
+                .filter((p) => p.id !== editing?.id)
+                .map((p) => ({ value: String(p.id), label: p.fullName }))}
+              {...form.getInputProps("spousePersonId")}
             />
             <MultiSelect
               label="Funções"

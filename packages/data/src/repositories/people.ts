@@ -3,6 +3,7 @@ import type { AppDatabase } from "../sqlAdapter";
 
 export interface PersonWithRoles extends Person {
   communityName: string | null;
+  spouseName: string | null;
   roles: Role[];
 }
 
@@ -14,7 +15,9 @@ interface PersonRow {
   community_id: number | null;
   active: number;
   notes: string | null;
+  spouse_person_id: number | null;
   community_name: string | null;
+  spouse_name: string | null;
 }
 
 interface RoleRow {
@@ -34,7 +37,9 @@ function mapRow(row: PersonRow, roles: Role[]): PersonWithRoles {
     communityId: row.community_id,
     active: row.active === 1,
     notes: row.notes,
+    spousePersonId: row.spouse_person_id,
     communityName: row.community_name,
+    spouseName: row.spouse_name,
     roles
   };
 }
@@ -45,8 +50,16 @@ export interface PersonInput {
   email?: string | null;
   communityId?: number | null;
   notes?: string | null;
+  spousePersonId?: number | null;
   roleIds: number[];
 }
+
+const PERSON_SELECT = `
+  SELECT p.*, co.name as community_name, sp.full_name as spouse_name
+  FROM people p
+  LEFT JOIN communities co ON co.id = p.community_id
+  LEFT JOIN people sp ON sp.id = p.spouse_person_id
+`;
 
 function fetchRolesForPeople(db: AppDatabase, personIds: number[]): Map<number, Role[]> {
   const map = new Map<number, Role[]>();
@@ -73,14 +86,7 @@ function fetchRolesForPeople(db: AppDatabase, personIds: number[]): Map<number, 
 }
 
 export function listPeople(db: AppDatabase): PersonWithRoles[] {
-  const rows = db
-    .prepare(
-      `SELECT p.*, c.name as community_name
-       FROM people p
-       LEFT JOIN communities c ON c.id = p.community_id
-       ORDER BY p.full_name`
-    )
-    .all() as PersonRow[];
+  const rows = db.prepare(`${PERSON_SELECT} ORDER BY p.full_name`).all() as PersonRow[];
 
   const rolesByPerson = fetchRolesForPeople(
     db,
@@ -90,14 +96,7 @@ export function listPeople(db: AppDatabase): PersonWithRoles[] {
 }
 
 export function getPerson(db: AppDatabase, id: number): PersonWithRoles | undefined {
-  const row = db
-    .prepare(
-      `SELECT p.*, c.name as community_name
-       FROM people p
-       LEFT JOIN communities c ON c.id = p.community_id
-       WHERE p.id = ?`
-    )
-    .get(id) as PersonRow | undefined;
+  const row = db.prepare(`${PERSON_SELECT} WHERE p.id = ?`).get(id) as PersonRow | undefined;
   if (!row) return undefined;
 
   const rolesByPerson = fetchRolesForPeople(db, [id]);
@@ -110,6 +109,36 @@ function syncPersonRoles(db: AppDatabase, personId: number, roleIds: number[]): 
   for (const roleId of roleIds) {
     insert.run({ personId, roleId });
   }
+}
+
+/**
+ * Mantem o vinculo de conjuge simetrico: se A passa a ter B como conjuge,
+ * B tambem passa a ter A. Desfaz automaticamente qualquer vinculo anterior
+ * dos dois lados (ninguem fica com dois "conjuges" ao mesmo tempo).
+ */
+function syncSpouseLink(db: AppDatabase, personId: number, newSpouseId: number | null): void {
+  const row = db.prepare("SELECT spouse_person_id FROM people WHERE id = ?").get(personId) as
+    | { spouse_person_id: number | null }
+    | undefined;
+  const oldSpouseId = row?.spouse_person_id ?? null;
+
+  if (oldSpouseId === newSpouseId) return;
+
+  if (oldSpouseId) {
+    db.prepare("UPDATE people SET spouse_person_id = NULL WHERE id = ?").run(oldSpouseId);
+  }
+
+  if (newSpouseId) {
+    const otherRow = db.prepare("SELECT spouse_person_id FROM people WHERE id = ?").get(newSpouseId) as
+      | { spouse_person_id: number | null }
+      | undefined;
+    if (otherRow?.spouse_person_id && otherRow.spouse_person_id !== personId) {
+      db.prepare("UPDATE people SET spouse_person_id = NULL WHERE id = ?").run(otherRow.spouse_person_id);
+    }
+    db.prepare("UPDATE people SET spouse_person_id = ? WHERE id = ?").run(personId, newSpouseId);
+  }
+
+  db.prepare("UPDATE people SET spouse_person_id = ? WHERE id = ?").run(newSpouseId, personId);
 }
 
 export function createPerson(db: AppDatabase, input: PersonInput): PersonWithRoles {
@@ -127,6 +156,9 @@ export function createPerson(db: AppDatabase, input: PersonInput): PersonWithRol
         notes: data.notes ?? null
       });
     syncPersonRoles(db, result.lastInsertRowid, data.roleIds);
+    if (data.spousePersonId !== undefined) {
+      syncSpouseLink(db, result.lastInsertRowid, data.spousePersonId);
+    }
     return result.lastInsertRowid;
   });
 
@@ -149,6 +181,9 @@ export function updatePerson(db: AppDatabase, id: number, input: PersonInput): P
       notes: data.notes ?? null
     });
     syncPersonRoles(db, id, data.roleIds);
+    if (data.spousePersonId !== undefined) {
+      syncSpouseLink(db, id, data.spousePersonId);
+    }
   });
 
   update(input);

@@ -67,7 +67,8 @@ export function generateSchedule(input: GenerationInput): GenerationResult {
                 availabilityRules: input.availabilityRules,
                 history: { assignmentCountByPerson, lastAssignmentDateByPerson },
                 averageAssignmentCount,
-                maxAssignmentCount
+                maxAssignmentCount,
+                usedSlots
               },
               input.weights
             )

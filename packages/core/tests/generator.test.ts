@@ -7,7 +7,13 @@ const LEITOR = 1;
 const MINISTRO = 2;
 
 function person(id: number, roleIds: number[], active = true): GenerationPerson {
-  return { id, fullName: `Pessoa ${id}`, active, roles: roleIds.map((roleId) => ({ roleId, preferenceWeight: 0 })) };
+  return {
+    id,
+    fullName: `Pessoa ${id}`,
+    active,
+    roles: roleIds.map((roleId) => ({ roleId, preferenceWeight: 0 })),
+    spousePersonId: null
+  };
 }
 
 function baseInput(overrides: Partial<GenerationInput> = {}): GenerationInput {
@@ -148,11 +154,41 @@ describe("generateSchedule — equilibrio e pontuacao", () => {
       baseInput({
         celebrations: [{ id: 1, date: "2026-08-30", time: "19:30", requirements: [{ roleId: LEITOR, quantityNeeded: 1 }] }],
         people: [
-          { id: 1, fullName: "Pessoa 1", active: true, roles: [{ roleId: LEITOR, preferenceWeight: 0 }] },
-          { id: 2, fullName: "Pessoa 2", active: true, roles: [{ roleId: LEITOR, preferenceWeight: 5 }] }
+          { id: 1, fullName: "Pessoa 1", active: true, roles: [{ roleId: LEITOR, preferenceWeight: 0 }], spousePersonId: null },
+          { id: 2, fullName: "Pessoa 2", active: true, roles: [{ roleId: LEITOR, preferenceWeight: 5 }], spousePersonId: null }
         ]
       })
     );
     expect(result.assignments[0].personId).toBe(2);
+  });
+
+  it("prefere escalar o conjuge junto quando ele ja esta na mesma missa", () => {
+    // Leitor so tem a pessoa 1 elegivel (mais escasso, processado primeiro).
+    // Ministro tem pessoa 2 e pessoa 3 empatados em tudo, exceto que a
+    // pessoa 3 e casada com a pessoa 1 — que ja foi escalada como Leitora
+    // nesse mesmo horario. Sem o bonus, o desempate seria por id (pessoa 2).
+    const result = generateSchedule(
+      baseInput({
+        celebrations: [
+          {
+            id: 1,
+            date: "2026-08-30",
+            time: "19:30",
+            requirements: [
+              { roleId: LEITOR, quantityNeeded: 1 },
+              { roleId: MINISTRO, quantityNeeded: 1 }
+            ]
+          }
+        ],
+        people: [
+          { id: 1, fullName: "Pessoa 1", active: true, roles: [{ roleId: LEITOR, preferenceWeight: 0 }], spousePersonId: 3 },
+          { id: 2, fullName: "Pessoa 2", active: true, roles: [{ roleId: MINISTRO, preferenceWeight: 0 }], spousePersonId: null },
+          { id: 3, fullName: "Pessoa 3", active: true, roles: [{ roleId: MINISTRO, preferenceWeight: 0 }], spousePersonId: 1 }
+        ]
+      })
+    );
+
+    const ministro = result.assignments.find((a) => a.roleId === MINISTRO);
+    expect(ministro?.personId).toBe(3);
   });
 });

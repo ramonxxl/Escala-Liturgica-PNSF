@@ -10,6 +10,8 @@ export interface GenerationPerson {
   fullName: string;
   active: boolean;
   roles: GenerationPersonRole[];
+  /** Conjuge (outro integrante) — o motor da prioridade a escalar os dois na mesma missa. */
+  spousePersonId: number | null;
 }
 
 export interface GenerationAvailabilityRule {
