@@ -42,6 +42,7 @@ import {
   substituteAssignment,
   rankSubstitutes,
   verifySchedule,
+  getScheduleStatusForRange,
   setAssignmentStatus,
   getDashboardSummary,
   getAssignmentHistory,
@@ -119,6 +120,9 @@ export function registerIpcHandlers(db: AppDatabase, dbPath: string): void {
   );
   ipcMain.handle("schedules:rankSubstitutes", (_event, assignmentId: number) => rankSubstitutes(db, assignmentId));
   ipcMain.handle("schedules:verify", (_event, celebrationId: number) => verifySchedule(db, celebrationId));
+  ipcMain.handle("schedules:statusForRange", (_event, startDate: string, endDate: string) =>
+    getScheduleStatusForRange(db, startDate, endDate)
+  );
   ipcMain.handle("schedules:generateForRange", (_event, startDate: string, endDate: string, roleIds?: number[]) =>
     generateAndSaveScheduleForRange(db, startDate, endDate, roleIds)
   );

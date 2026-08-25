@@ -716,3 +716,69 @@ export function verifySchedule(db: AppDatabase, celebrationId: number): Schedule
 
   return problems;
 }
+
+export interface ScheduleStatusInfo {
+  celebrationId: number;
+  status: "nao_gerada" | "pendente" | "completa";
+  filled: number;
+  needed: number;
+}
+
+/**
+ * Situacao resumida (preenchida/pendente/nao gerada) de todas as missas de um
+ * periodo de uma vez — usado pela tela de Escalas pra mostrar a lista do mes
+ * sem precisar de uma consulta por missa. "nao_gerada" = ainda nao existe
+ * registro em `schedules`; "completa" = atribuicoes (nao recusadas) cobrem
+ * todas as vagas necessarias; senao "pendente".
+ */
+export function getScheduleStatusForRange(db: AppDatabase, startDate: string, endDate: string): ScheduleStatusInfo[] {
+  const celebrationRows = db
+    .prepare("SELECT id FROM celebrations WHERE date >= ? AND date <= ?")
+    .all(startDate, endDate) as { id: number }[];
+  if (celebrationRows.length === 0) return [];
+
+  const ids = celebrationRows.map((row) => row.id);
+  const placeholders = ids.map(() => "?").join(",");
+
+  const neededByCelebration = new Map(
+    (
+      db
+        .prepare(
+          `SELECT celebration_id, COALESCE(SUM(quantity_needed), 0) as needed
+           FROM celebration_requirements WHERE celebration_id IN (${placeholders}) GROUP BY celebration_id`
+        )
+        .all(...ids) as { celebration_id: number; needed: number }[]
+    ).map((row) => [row.celebration_id, row.needed])
+  );
+
+  const scheduledIds = new Set(
+    (db.prepare(`SELECT celebration_id FROM schedules WHERE celebration_id IN (${placeholders})`).all(
+      ...ids
+    ) as { celebration_id: number }[]).map((row) => row.celebration_id)
+  );
+
+  const filledByCelebration = new Map(
+    (
+      db
+        .prepare(
+          `SELECT s.celebration_id as celebration_id, COUNT(*) as filled
+           FROM schedule_assignments sa
+           JOIN schedules s ON s.id = sa.schedule_id
+           WHERE s.celebration_id IN (${placeholders}) AND sa.status != 'declined'
+           GROUP BY s.celebration_id`
+        )
+        .all(...ids) as { celebration_id: number; filled: number }[]
+    ).map((row) => [row.celebration_id, row.filled])
+  );
+
+  return ids.map((celebrationId) => {
+    const needed = neededByCelebration.get(celebrationId) ?? 0;
+    const filled = filledByCelebration.get(celebrationId) ?? 0;
+    const status: ScheduleStatusInfo["status"] = !scheduledIds.has(celebrationId)
+      ? "nao_gerada"
+      : filled >= needed
+        ? "completa"
+        : "pendente";
+    return { celebrationId, status, filled, needed };
+  });
+}

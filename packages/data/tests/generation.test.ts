@@ -15,6 +15,7 @@ import {
   generateAndSaveSchedule,
   generateAndSaveScheduleForRange,
   getScheduleForCelebration,
+  getScheduleStatusForRange,
   rankSubstitutes,
   removeAssignment,
   setAssignmentStatus,
@@ -557,5 +558,68 @@ describe("verifySchedule", () => {
     expect(problems).toEqual([
       { severity: "error", message: "Maria não está disponível nesse dia e horário (função Leitor)." }
     ]);
+  });
+});
+
+describe("getScheduleStatusForRange", () => {
+  it("missa sem escala gerada -> nao_gerada", () => {
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+
+    const [status] = getScheduleStatusForRange(db, "2026-08-01", "2026-08-31");
+    expect(status).toEqual({ celebrationId: celebration.id, status: "nao_gerada", filled: 0, needed: 1 });
+  });
+
+  it("escala gerada parcialmente -> pendente", () => {
+    createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 2 }]
+    });
+    generateAndSaveSchedule(db, celebration.id);
+
+    const [status] = getScheduleStatusForRange(db, "2026-08-01", "2026-08-31");
+    expect(status).toEqual({ celebrationId: celebration.id, status: "pendente", filled: 1, needed: 2 });
+  });
+
+  it("escala totalmente preenchida -> completa (atribuicao recusada nao conta como preenchida)", () => {
+    createPerson(db, { fullName: "Maria", communityId, roleIds: [leitorId] });
+    const celebration = createCelebration(db, {
+      date: "2026-08-30",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+    const schedule = generateAndSaveSchedule(db, celebration.id);
+    expect(getScheduleStatusForRange(db, "2026-08-01", "2026-08-31")[0].status).toBe("completa");
+
+    setAssignmentStatus(db, schedule.assignments[0].id, "declined");
+    expect(getScheduleStatusForRange(db, "2026-08-01", "2026-08-31")[0]).toEqual({
+      celebrationId: celebration.id,
+      status: "pendente",
+      filled: 0,
+      needed: 1
+    });
+  });
+
+  it("ignora missas fora do intervalo de datas", () => {
+    createCelebration(db, {
+      date: "2026-09-06",
+      time: "19:30",
+      communityId,
+      celebrationType: "Missa Dominical",
+      requirements: [{ roleId: leitorId, quantityNeeded: 1 }]
+    });
+
+    expect(getScheduleStatusForRange(db, "2026-08-01", "2026-08-31")).toEqual([]);
   });
 });

@@ -14,6 +14,7 @@ import type {
   PersistedAssignment,
   SubstituteCandidate,
   ScheduleProblem,
+  ScheduleStatusInfo,
   BatchGenerationResult,
   DashboardSummary,
   HistorySummary,
@@ -98,6 +99,8 @@ const api = {
       ipcRenderer.invoke("schedules:rankSubstitutes", assignmentId),
     verify: (celebrationId: number): Promise<ScheduleProblem[]> =>
       ipcRenderer.invoke("schedules:verify", celebrationId),
+    statusForRange: (startDate: string, endDate: string): Promise<ScheduleStatusInfo[]> =>
+      ipcRenderer.invoke("schedules:statusForRange", startDate, endDate),
     generateForRange: (startDate: string, endDate: string, roleIds?: number[]): Promise<BatchGenerationResult> =>
       ipcRenderer.invoke("schedules:generateForRange", startDate, endDate, roleIds),
     setAssignmentStatus: (
