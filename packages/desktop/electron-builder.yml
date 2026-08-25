@@ -16,6 +16,11 @@ publish:
   provider: github
   owner: ramonxxl
   repo: Escala-Liturgica-PNSF
+  # Por padrao o electron-builder cria o Release como rascunho (so visivel
+  # pra voce, e o electron-updater dos usuarios nao enxerga rascunhos).
+  # Publicando direto porque o pipeline ja roda os testes antes de chegar
+  # aqui — nao ha uma etapa manual de revisao no meio do caminho.
+  draft: false
 win:
   target: nsis
   artifactName: EscalaLiturgica_Setup_v${version}.exe
